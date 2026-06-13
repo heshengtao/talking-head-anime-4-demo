@@ -4,6 +4,11 @@ This repository contains demo programs for the "Talking Head(?) Anime from a Sin
 
 This demo code has two parts.
 
+> **Want to deploy the model in production?**  
+> Read **[GUIDE.md](GUIDE.md)** for a step-by-step tutorial: training → ONNX export → `merged_fast.onnx` (4.5 MB, 80+ fps GPU inference, zero PyTorch dependency).  
+> Includes ready-to-run Python scripts and a Web demo server.
+
+
 * **Improved model.** This part gives a model similar to [Version 3](https://github.com/pkhungurn/talking-head-anime-3-demo) of the porject. It has one demo program:
 
   * The `full_manual_poser` allows the user to manipulate a character's facial expression and body rotation through a graphical user interface.
@@ -254,6 +259,36 @@ In order for the system to work well, the input image must obey the following co
 * The alpha channels of all pixels that do not belong to the character (i.e., background pixels) must be 0.
 
 ![An example of an image that conforms to the above criteria](docs/images/input_spec.png "An example of an image that conforms to the above criteria")
+
+## ONNX Model Export (Community Contribution)
+
+This fork adds the ability to export trained student models to ONNX format for lightweight production deployment.
+
+### Scripts
+
+| Script | Description |
+|--------|-------------|
+| `export_onnx.py <model_dir>` | Export separate `face_morpher.onnx` + `body_morpher.onnx` |
+| `merge_onnx.py <model_dir>` | Merge into single `merged.onnx` (raw output, needs CPU post-processing) |
+| `merge_onnx_fast.py <model_dir>` | **Recommended**: merge + GPU post-processing baked in, outputs `merged_fast.onnx` — uint8 RGB ready to use |
+
+### Requirements
+
+```bash
+pip install onnx onnxruntime onnxruntime-directml simplejpeg
+```
+
+### Quick Test
+
+```bash
+python merge_onnx_fast.py data/character_models/lambda_00
+python web_demo/server.py
+# Open http://localhost:8000
+```
+
+For full documentation, see **[GUIDE.md](GUIDE.md)**.
+
+---
 
 ## Documentation for the Tools
 
