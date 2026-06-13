@@ -1,6 +1,9 @@
 # THA4 Student Model Training & ONNX Export Pipeline
 
-[中文版](README_ZH.md)
+[中文版](README_ZH.md) | [Agent Instructions](README_AGENT.md)
+
+> **Using an AI coding agent (opencode, Claude Code, etc.)?**  
+> Send it the raw URL of [README_AGENT.md](https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md) — it contains step-by-step instructions optimized for AI-guided execution.
 
 ---
 

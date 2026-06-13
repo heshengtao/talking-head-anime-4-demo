@@ -1,6 +1,9 @@
 # THA4 学生模型训练 & ONNX 导出流水线
 
-[English](README.md)
+[English](README.md) | [Agent 指引](README_AGENT.md)
+
+> **正在使用 AI 编程助手（opencode、Claude Code 等）？**  
+> 把 [README_AGENT.md](https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md) 的 raw 链接发给它——里面是专为 AI 引导执行优化的分步指令。
 
 ---
 
