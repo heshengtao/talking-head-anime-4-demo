@@ -3,7 +3,11 @@
 [English](README.md) | [Agent 指引](README_AGENT.md)
 
 > **正在使用 AI 编程助手（opencode、Claude Code 等）？**  
-> 把 [README_AGENT.md](https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md) 的 raw 链接发给它——里面是专为 AI 引导执行优化的分步指令。
+> 把下面这个链接发给它，即可在 AI 引导下完成全部流程：
+>
+> ```
+> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> ```
 
 ---
 
