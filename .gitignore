@@ -53,5 +53,3 @@ venv/*
 
 # io dump to ABCI tasks
 *.o*
-
-*.png
