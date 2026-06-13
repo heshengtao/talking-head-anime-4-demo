@@ -1,311 +1,740 @@
-# Demo Code for "Talking Head(?) Anime from a Single Image 4: Improved Model and Its Distillation"
+# THA4 Student Model Training & ONNX Export Pipeline
 
-This repository contains demo programs for the "Talking Head(?) Anime from a Single Image 4: Improved Model and Its Distillation" project. Roughly, the project is about a machine learning model that can animate an anime character given only one image. However, the model is too slow to run in real-time. So, it also proposes an algorithm to use the model to train a small machine learning model that is specialized to a character image that can anime the character in real time.
+[English](#english) | [中文](#中文)
 
-This demo code has two parts.
+---
 
-> **Want to deploy the model in production?**  
-> Read **[GUIDE.md](GUIDE.md)** for a step-by-step tutorial: training → ONNX export → `merged_fast.onnx` (4.5 MB, 80+ fps GPU inference, zero PyTorch dependency).  
-> Includes ready-to-run Python scripts and a Web demo server.
+<a id="english"></a>
+## English
 
+This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to ONNX** for real-time GPU inference — no PyTorch dependency at runtime.
 
-* **Improved model.** This part gives a model similar to [Version 3](https://github.com/pkhungurn/talking-head-anime-3-demo) of the porject. It has one demo program:
+The original research is from ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo). This fork adds production-ready ONNX export and a web demo.
 
-  * The `full_manual_poser` allows the user to manipulate a character's facial expression and body rotation through a graphical user interface.
-
-  There are no real-time demos because the new model is too slow for that.
-
-* **Distillation.** This part allows the user to train small models (which we will refer to as **student models**) to mimic that behavior of the full system with regards to a specific character image. It also allows the user to run these models under various interfaces. The demo programs are:
-
-  * `distill` trains a student model given a configuration file, a $512 \times 512$ RGBA character image, and a mask of facial organs.
-  * `distiller_ui` provides a user-friendly interface to `distill`, allowing you to create training configurations and providing useful documentation.
-  * `character_model_manual_poser` allows the user to control trained student models with a graphical user interface.
-  * `character_model_ifacialmocap_puppeteer` allows the user to control trained student models with their facial movement, which is captured by the [iFacialMocap](https://www.ifacialmocap.com/) software. To run this software, you must have an iOS device and, of course, iFacialMocap.
-  *  `character_model_mediapipe_puppeteer` allows the user to control trained student models with their facial movement, which is captured a web camera and processed by the [Mediapipe FaceLandmarker](https://developers.google.com/mediapipe/solutions/vision/face_landmarker) model. To run this software, you need a web camera.
-
-## Preemptive FAQs
-
-### What is the program to control character images with my facial movement?
-
-There is no such program in this release. If you want one, try the `ifacialmocap_puppeteer` of [Version 3](https://github.com/pkhungurn/talking-head-anime-3-demo).
-
-### OK. I'm confused. Isn't your work about easy VTubing? Are you saying this release cannot do it?
-
-NO. This release does it in a more complicated way. In order to control an image, you need to create a "student model." It is a small (< 2MB) and fast machine learning model that knows how to animate that particular image. Then, the student model can be controlled with facial movement. You can find two student models in the `data/character_models` directory. The [two](https://pkhungurn.github.io/talking-head-anime-4/supplementary/webcam-demo/index.html) [demos](https://pkhungurn.github.io/talking-head-anime-4/supplementary/manual-poser-demo/index.html) on the project website feature 13 students models.
-
-### So, for this release, you can control only these few characters in real time?
-
-No. You can create your own student models.
-
-### How do I create this student model then?
-
-1. You prepare your characater image according to the "Constraint on Input Images" section below.
-2. You prepare a black-and-white mask image that covers the eyes and the mouth of the character, like [this image](data/images/lambda_00_face_mask.png). You can see how I made it with [GIMP](https://www.gimp.org/) by inspecting this [GIMP file](data/images/lambda_00_face_mask.xcf).
-3. You use `distiller_ui` to create a configuration file that specifies how the student model should be trained.
-4. You use `distiller_ui` or `distill` to start the training process.
-5. You wait several ten hours for the student model to finish training. Last time I tried, it was about 30 hours on a computer with an Nvidia RTX A6000 GPU.
-6. After that, you can control the student model with `character_model_ifacialmocap_puppeteer` and `character_model_mediapipe_puppeteer`.
-
-### Why is this release so hard to use?
-
-[Version 3](https://github.com/pkhungurn/talking-head-anime-3-demo) is arguably easier to use because you can give it an animate and you can control it with your facial movment immediately. However, I was not satisfied with its image quality and speed. 
-
-In this release, I explore a new way of doing things. I added a new preprocessing stage (i.e., training the student models) that has to be done one time per character image. It allows the image to be animated much faster at a higher image quality level.
-
-In other words, it makes the user's life difficult but the engineer/researcher happy. Patient users who are willing to go through the steps, though, would be rewarded with faster animation.
-
-
-### Can I use a student model from a web browser?
-
-No. A student model created by `distill` is a [PyTorch](https://pytorch.org/) model, which cannot run directly in the browser. It needs to be converted to the appropriate format ([TensorFlow.js](https://www.tensorflow.org/js)) first, and the [web](https://pkhungurn.github.io/talking-head-anime-4/supplementary/webcam-demo/index.html) [demos](https://pkhungurn.github.io/talking-head-anime-4/supplementary/manual-poser-demo/index.html) use the converted models. However, The conversion code is not included in this repository. I will not release it unless I change my mind.
-
-## Hardware Requirements
-
-All programs require a recent and powerful Nvidia GPU to run. I developed the programs on a machine with an Nvidia RTX A6000. However, anything after the GeForce RTX 2080 should be fine.
-
-The `character_model_ifacialmocap_puppeteer` program requires an iOS device that is capable of computing [blend shape parameters](https://developer.apple.com/documentation/arkit/arfaceanchor/2928251-blendshapes) from a video feed. This means that the device must be able to run iOS 11.0 or higher and must have a TrueDepth front-facing camera. (See [this page](https://developer.apple.com/documentation/arkit/content_anchors/tracking_and_visualizing_faces) for more info.) In other words, if you have the iPhone X or something better, you should be all set. Personally, I have used an iPhone 12 mini.
-
-The `character_model_mediapipe_puppeteer` program requires a web camera.
-
-## Software Requirements
-
-### GPU Driver and CUDA Toolkit
-
-Please update your GPU's device driver and install the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) that is compatible with your GPU and is newer than the version you will be installing in the next subsection.
-
-### Python and Python Libraries
-
-All programs are written in the [Python](https://www.python.org/) programming languages. The following libraries are required:
-
-* `python` 3.10.11
-* `torch` 1.13.1 with CUDA support
-* `torchvision` 0.14.1
-* `tensorboard` 2.15.1
-* `opencv-python` 4.8.1.78
-* `wxpython` 4.2.1
-* `numpy-quaternion` 2022.4.2
-* `pillow` 9.4.0
-* `matplotlib` 3.6.3
-* `einops` 0.6.0
-* `mediapipe` 0.10.3
-* `numpy` 1.26.3
-* `scipy` 1.12.0
-* `omegaconf` 2.3.0
-
-Instead of installing these libraries yourself, you should follow the recommended method to set up a Python environment in the next section.
-
-### iFacialMocap
-
-If you want to use ``ifacialmocap_puppeteer``, you will also need to an iOS software called [iFacialMocap](https://www.ifacialmocap.com/) (a 980 yen purchase in the App Store). Your iOS and your computer must use the same network. For example, you may connect them to the same wireless router.
-
-## Creating Python Environment
-
-### Installing Python
-
-Please install [Python 3.10.11](https://www.python.org/downloads/release/python-31011/). 
-
-I recommend using [`pyenv`](https://github.com/pyenv/pyenv) (or [`pyenv-win`](https://github.com/pyenv-win/pyenv-win) for Windows users) to manage multiple Python versions on your system. If you use `pyenv`, this repository has a `.python-version` file that indicates it would use Python 3.10.11. So, you will be using Python 3.10.11 automatically once you `cd` into the repository's directory.
-
-Make sure that you can run Python from the command line.
-
-### Installing Poetry
-
-Please install [Poetry](https://python-poetry.org/) 1.7 or later. We will use it to automatically install the required libraries. Again, make sure that you can run it from the command line.
-
-### Cloning the Repository
-
-Please clone the repository to an arbitrary directory in your machine.
-
-### Instruction for Linux/OSX Users
-
-1. Open a shell.
-2. `cd` to the directory you just cloned the repository too
-   ```
-   cd SOMEWHERE/talking-head-anime-4-demo
-   ```
-3. Use Python to create a virtual environment under the `venv` directory.
-   ```
-   python -m venv venv --prompt talking-head-anime-4-demo
-   ```
-4. Activate the newly created virtual environment. You can either use the script I provide:
-   ```
-   source bin/activate-venv.sh
-   ```
-   or do it yourself:
-   ```
-   source venv/bin/activate   
-   ```
-5. Use Poetry to install libraries.
-   ```
-   cd poetry
-   poetry install
-   ```
-
-### Instruction for Windows Users
-
-1. Open a shell.
-2. `cd` to the directory you just cloned the repository too
-   ```
-   cd SOMEWHERE\talking-head-anime-4-demo
-   ```
-3. Use Python to create a virtual environment under the `venv` directory.
-   ```
-   python -m venv venv --prompt talking-head-anime-4-demo
-   ```
-4. Activate the newly created virtual environment. You can either use the script I provide:
-   ```
-   bin\activate-venv.bat
-   ```
-   or do it yourself:
-   ```
-   venv\Scripts\activate   
-   ```
-5. Use Poetry to install libraries.
-   ```
-   cd poetry
-   poetry install
-   ```
-
-## Download the Models/Dataset Files
-
-### THA4 Models
-
-Please download [this ZIP file](https://www.dropbox.com/scl/fi/7wec0sur7449iqgtlpi3n/tha4-models.zip?rlkey=0f9d1djmbvjjjn09469s1adx8&dl=0) hosted on Dropbox, and unzip it to the `data/tha4` directory the under the repository's directory. In the end, the directory tree should look like the following diagram:
-
-```
-+ talking-head-anime-4-demo
-   + data
-      - character_models
-      - distill_examples
-      + tha4
-         - body_morpher.pt
-         - eyebrow_decomposer.pt
-         - eyebrow_morphing_combiner.pt
-         - face_morpher.pt
-         - upscaler.pt
-     - images
-     - third_party
-```
-
-### Pose Dataset
-
-If you want to create your own student models, you also need to download a dataset of poses that are needed for the training process. Download [this `pose_dataset.pt` file](https://www.dropbox.com/scl/fi/du10e6buzr5bslbe025qu/pose_dataset.pt?rlkey=y052g4n3xb14nu2elctzouc5x&dl=0) and save it to the `data` folder. The directory tree should then look like the following diagram:
-
-```
-+ talking-head-anime-4-demo
-   + data
-      - character_models
-      - distill_examples
-      - tha4
-      - images
-      - third_party
-      - pose_dataset.pt
-```
-
-## Running the Programs
-
-The programs are located in the `src/tha4/app` directory. You need to run them from a shell with the provided scripts.
-
-### Instruction for Linux/OSX Users
-
-1. Open a shell.
-2. `cd` to the repository's directory.
-   ```
-   cd SOMEWHERE/talking-head-anime-4-demo
-   ```
-3. Run a program.
-   ```
-   bin/run src/tha4/app/<program-file-name>
-   ```
-   where `<program-file-name>` can be replaced with:
-   
-   * `character_model_ifacialmocap_puppeteer.py`
-   * `character_model_manual_poser.py`
-   * `character_model_mediapipe_puppeteer.py`
-   * `distill.py`
-   * `disllerer_ui.py`
-   * `full_manual_poser.py`
-
-### Instruction for Windows Users
-
-1. Open a shell.
-2. `cd` to the repository's directory.
-   ```
-   cd SOMEWHERE\talking-head-anime-4-demo
-   ```
-3. Run a program.
-   ```
-   bin\run.bat src\tha4\app\<program-file-name>
-   ```
-   where `<program-file-name>` can be replaced with:
-   
-   * `character_model_ifacialmocap_puppeteer.py`
-   * `character_model_manual_poser.py`
-   * `character_model_mediapipe_puppeteer.py`
-   * `distill.py`
-   * `disllerer_ui.py`
-   * `full_manual_poser.py`
-
-## Contraints on Input Images
-
-In order for the system to work well, the input image must obey the following constraints:
-
-* It should be of resolution 512 x 512. (If the demo programs receives an input image of any other size, they will resize the image to this resolution and also output at this resolution.)
-* It must have an alpha channel.
-* It must contain only one humanoid character.
-* The character should be standing upright and facing forward.
-* The character's hands should be below and far from the head.
-* The head of the character should roughly be contained in the 128 x 128 box in the middle of the top half of the image.
-* The alpha channels of all pixels that do not belong to the character (i.e., background pixels) must be 0.
-
-![An example of an image that conforms to the above criteria](docs/images/input_spec.png "An example of an image that conforms to the above criteria")
-
-## ONNX Model Export (Community Contribution)
-
-This fork adds the ability to export trained student models to ONNX format for lightweight production deployment.
-
-### Scripts
-
-| Script | Description |
-|--------|-------------|
-| `export_onnx.py <model_dir>` | Export separate `face_morpher.onnx` + `body_morpher.onnx` |
-| `merge_onnx.py <model_dir>` | Merge into single `merged.onnx` (raw output, needs CPU post-processing) |
-| `merge_onnx_fast.py <model_dir>` | **Recommended**: merge + GPU post-processing baked in, outputs `merged_fast.onnx` — uint8 RGB ready to use |
-
-### Requirements
+### Quickstart for Agents / Developers
 
 ```bash
-pip install onnx onnxruntime onnxruntime-directml simplejpeg
-```
+# 1. Clone
+git clone https://github.com/heshengtao/talking-head-anime-4-demo.git
+cd talking-head-anime-4-demo
 
-### Quick Test
+# 2. Install Python environment
+python -m venv venv --prompt talking-head-anime-4-demo
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # Linux/Mac
+cd poetry && poetry install && cd ..
 
-```bash
-python merge_onnx_fast.py data/character_models/lambda_00
+# 3. Download base models (required)
+#    Download from: https://www.dropbox.com/scl/fi/7wec0sur7449iqgtlpi3n/tha4-models.zip?rlkey=0f9d1djmbvjjjn09469s1adx8&dl=1
+#    Extract to → data/tha4/ (contains body_morpher.pt, face_morpher.pt, etc.)
+
+# 4. Download pose dataset (required for training)
+#    Download from: https://www.dropbox.com/scl/fi/du10e6buzr5bslbe025qu/pose_dataset.pt?rlkey=y052g4n3xb14nu2elctzouc5x&dl=1
+#    Save to → data/pose_dataset.pt
+
+# 5. Prepare your character image and face mask (see Constraints below)
+
+# 6. Train your student model
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_face_morpher.py --config_file data/distill_examples/my_char/config.yaml
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_body_morpher.py --config_file data/distill_examples/my_char/config.yaml
+
+# 7. Assemble and export to ONNX (see Full Steps below)
+python merge_onnx_fast.py data/distill_examples/my_char/character_model
+
+# 8. Test
 python web_demo/server.py
 # Open http://localhost:8000
 ```
 
-For full documentation, see **[GUIDE.md](GUIDE.md)**.
+---
+
+### Full Step-by-Step Guide
+
+#### Step 1: Set Up Python Environment
+
+**Requirements:** Python 3.10.x, Poetry 1.7+, NVIDIA GPU (RTX 2080+).
+
+```bash
+# Install Poetry (if missing)
+(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+
+# Create venv
+cd talking-head-anime-4-demo
+python -m venv venv --prompt talking-head-anime-4-demo
+
+# Activate
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # Linux/Mac
+
+# Install dependencies
+cd poetry && poetry install && cd ..
+```
+
+The `pyproject.toml` installs PyTorch 1.13.1+cu117, wxPython, OpenCV, MediaPipe, and all other requirements.
+
+#### Step 2: Download Required Files
+
+**THA4 base models** (Dropbox, ~200 MB):
+```
+URL:  https://www.dropbox.com/scl/fi/7wec0sur7449iqgtlpi3n/tha4-models.zip?rlkey=0f9d1djmbvjjjn09469s1adx8&dl=1
+Extract to → data/tha4/
+```
+
+Expected files:
+```
+data/tha4/
+  body_morpher.pt
+  eyebrow_decomposer.pt
+  eyebrow_morphing_combiner.pt
+  face_morpher.pt
+  upscaler.pt
+```
+
+**Pose dataset** (Dropbox, ~200 MB):
+```
+URL:  https://www.dropbox.com/scl/fi/du10e6buzr5bslbe025qu/pose_dataset.pt?rlkey=y052g4n3xb14nu2elctzouc5x&dl=1
+Save to → data/pose_dataset.pt
+```
+
+#### Step 3: Prepare Character Image
+
+See [Constraints on Input Images](#constraints-on-input-images) below.
+
+Save your image as:
+```
+data/images/my_char.png
+```
+
+#### Step 4: Create Face Mask Image
+
+Use [GIMP](https://www.gimp.org/) (free, open-source) to create a face mask:
+
+1. Open your `my_char.png` in GIMP
+2. Create a new layer, fill it **white**
+3. Use the paintbrush (black color) to paint over the **eyes and mouth** areas
+4. Export as `my_char_face_mask.png` (512×512, RGB, no alpha)
+
+Reference: `data/images/lambda_00_face_mask.png` and `data/images/lambda_00_face_mask.xcf`.
+
+Save to:
+```
+data/images/my_char_face_mask.png
+```
+
+The mask must be a black-and-white image where:
+- White (255,255,255) = areas the model CAN modify
+- Black (0,0,0) = eyes and mouth regions (protected)
+
+#### Step 5: Create Training Configuration
+
+Create `data/distill_examples/my_char/config.yaml`:
+
+```yaml
+prefix: data/distill_examples/my_char
+character_image_file_name: data/images/my_char.png
+face_mask_image_file_name: data/images/my_char_face_mask.png
+face_morpher_random_seed_0: 12771885812175595441
+face_morpher_random_seed_1: 14367217090963479175
+body_morpher_random_seed_0: 2892221210020292507
+body_morpher_random_seed_1: 9998918537095922080
+num_cpu_workers: 1
+num_gpus: 1
+```
+
+Create the workspace directory:
+```bash
+mkdir data\distill_examples\my_char
+```
+
+#### Step 6: Train the Student Model
+
+Training consists of two stages that run sequentially:
+
+**Stage 1 — Face Morpher** (~1,000,000 examples, ~3 hours on RTX 4080):
+```bash
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_face_morpher.py --config_file data/distill_examples/my_char/config.yaml
+```
+
+**Stage 2 — Body Morpher** (~1,500,000 examples, ~5 hours on RTX 4080):
+```bash
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_body_morpher.py --config_file data/distill_examples/my_char/config.yaml
+```
+
+> **Monitoring:** Run `tensorboard --logdir=data/distill_examples/my_char` and open `http://localhost:6006`.
+
+> **Resuming:** If training is interrupted, just re-run the same command. The trainer auto-resumes from the latest snapshot.
+
+> **Alternative GUI:** `bin\run.bat src\tha4\app\distiller_ui.py` provides a graphical interface for creating configs and launching training.
+
+#### Step 7: Assemble the Final Character Model
+
+After both stages complete, copy the final checkpoints:
+
+```bash
+# Create output directory
+mkdir data\distill_examples\my_char\character_model
+
+# Copy final face morpher (checkpoint 0010 = 1,000,000 examples)
+copy data\distill_examples\my_char\face_morpher\checkpoint\0010\module_module.pt data\distill_examples\my_char\character_model\face_morpher.pt
+
+# Copy final body morpher (checkpoint 0015 = 1,500,000 examples)
+copy data\distill_examples\my_char\body_morpher\checkpoint\0015\module_module.pt data\distill_examples\my_char\character_model\body_morpher.pt
+
+# Copy character image
+copy data\images\my_char.png data\distill_examples\my_char\character_model\character.png
+```
+
+Create the model index file:
+```bash
+venv\Scripts\python.exe -c "
+import sys; sys.path.insert(0,'src')
+from tha4.charmodel.character_model import CharacterModel
+CharacterModel(
+    'data/distill_examples/my_char/character_model/character.png',
+    'data/distill_examples/my_char/character_model/face_morpher.pt',
+    'data/distill_examples/my_char/character_model/body_morpher.pt'
+).save('data/distill_examples/my_char/character_model/character_model.yaml')
+print('Done')
+"
+```
+
+Final structure:
+```
+data/distill_examples/my_char/character_model/
+  character_model.yaml
+  character.png        (~110-250 KB)
+  face_morpher.pt      (~480 KB)
+  body_morpher.pt      (~1.3 MB)
+```
+
+#### Step 8: Export to ONNX
+
+Install ONNX dependencies:
+```bash
+pip install onnx onnxruntime simplejpeg
+# For GPU: pip install onnxruntime-directml==1.17.1  (Windows, no cuDNN needed)
+# Or:       pip install onnxruntime-gpu                (Linux/Win, requires CUDA+cuDNN)
+```
+
+Run the export (recommended — GPU post-processing baked in):
+```bash
+python merge_onnx_fast.py data/distill_examples/my_char/character_model
+```
+
+Output: `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~4.5 MB).
+
+**Model I/O:**
+
+| Port | Name | Shape | Type | Description |
+|------|------|-------|------|-------------|
+| Input | `image` | (1, 4, 512, 512) | float32 | Preprocessed character image in [-1,1] with premultiplied alpha |
+| Input | `pose` | (1, 45) | float32 | 45 pose parameters (see table below) |
+| Output | `rgb` | (1, 3, 512, 512) | **uint8** | Final RGB image, sRGB, composited on dark background |
+
+> No CPU post-processing needed — the ONNX graph handles un-premultiply, sRGB conversion, and background compositing on GPU.
+
+**Alternative exports:**
+| Script | Output | Notes |
+|--------|--------|-------|
+| `export_onnx.py <dir>` | `face_morpher.onnx` + `body_morpher.onnx` | Two separate models |
+| `merge_onnx.py <dir>` | `merged.onnx` | Single model, raw [-1,1] output, needs CPU post-processing |
+| `merge_onnx_fast.py <dir>` | `merged_fast.onnx` | **Recommended** — uint8 RGB output, GPU post-processing baked in |
+
+#### Step 9: Test the ONNX Model
+
+**Command-line benchmark:**
+```bash
+venv\Scripts\python.exe -c "
+import onnxruntime, numpy as np, time, simplejpeg
+sess = onnxruntime.InferenceSession(
+    'data/distill_examples/my_char/character_model/onnx/merged_fast.onnx',
+    providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
+img = np.random.randn(1,4,512,512).astype(np.float32)
+pose = np.zeros((1,45), dtype=np.float32)
+for _ in range(20): sess.run(None, {'image':img, 'pose':pose})
+t0=time.perf_counter()
+for _ in range(60): _=sess.run(None, {'image':img, 'pose':pose})[0]
+t1=time.perf_counter()
+print(f'FPS: {60/(t1-t0):.0f}')
+"
+```
+
+Expected: 80+ fps with DirectML GPU (Windows), 3-5 fps with CPU.
+
+**Web interactive test:**
+```bash
+python web_demo/server.py
+```
+Open `http://localhost:8000` — character follows mouse, blinks, breathes.
 
 ---
 
-## Documentation for the Tools
+<a id="constraints-on-input-images"></a>
+### Constraints on Input Images
 
-* [`character_model_ifacial_model_puppeteer`](docs/character_model_ifacialmocap_puppeteer.md)
-* [`character_model_manual_poser`](docs/character_model_manual_poser.md)
-* [`character_model_mediapipe_puppeteer`](docs/character_model_mediapipe_puppeteer.md)
-* [`distill`](docs/distill.md)
-* [`distiller_ui`](docs/distiller_ui.md)
-* [`full_manual_poser`](docs/full_manual_poser.md)
+The input character image must follow these rules for the model to work well:
 
-## Disclaimer
+- **Resolution:** Exactly 512 × 512 pixels (programs will resize automatically but results are best at 512×512).
+- **Alpha channel:** Must be RGBA with transparent background (alpha = 0 for all background pixels).
+- **Character count:** Only one humanoid character.
+- **Pose:** Character must stand upright facing forward.
+- **Hands:** Below and far from the head.
+- **Head position:** The head should roughly fit in a 128 × 128 box at the middle of the top half of the image.
+- **Background:** All background pixels must have alpha = 0.
 
-The author is an employee of [pixiv Inc.](https://www.pixiv.co.jp/) This project is a part of his work as a researcher.
+![Example of a valid input image](docs/images/input_spec.png)
 
-However, this project is NOT a pixiv product. The company will NOT provide any support for this project. The author will try to support the project, but there are no Service Level Agreements (SLAs) that he will maintain.
+---
 
-The code is released under the [MIT license](https://github.com/pkhungurn/talking-head-anime-2-demo/blob/master/LICENSE).
-The THA4 models and the images under the `data/images` directory are released under the [Creative Commons Attribution-NonCommercial 4.0 International](https://creativecommons.org/licenses/by-nc/4.0/deed.en).
+### Pose Parameters Reference
 
-This repository redistributes a version of the [Face landmark detection model](https://developers.google.com/mediapipe/solutions/vision/face_landmarker) from the [MediaPipe](https://developers.google.com/mediapipe) project. The model has been released under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0.html).
+The 45-dimensional pose vector controls the character's expression and pose:
+
+| Index | Name | Description | Range |
+|-------|------|-------------|-------|
+| 0-1 | `eyebrow_troubled` | Troubled eyebrows (L/R) | 0~1 |
+| 2-3 | `eyebrow_angry` | Angry eyebrows (L/R) | 0~1 |
+| 4-5 | `eyebrow_lowered` | Lowered eyebrows (L/R) | 0~1 |
+| 6-7 | `eyebrow_raised` | Raised eyebrows (L/R) | 0~1 |
+| 8-9 | `eyebrow_happy` | Happy eyebrows (L/R) | 0~1 |
+| 10-11 | `eyebrow_serious` | Serious eyebrows (L/R) | 0~1 |
+| 12-13 | `eye_wink` | Eye wink (L/R) | 0~1 |
+| 14-15 | `eye_happy_wink` | Happy wink (L/R) | 0~1 |
+| 16-17 | `eye_surprised` | Surprised eyes (L/R) | 0~1 |
+| **18-19** | **`eye_relaxed`** | **Close eyes (L/R), 1=fully closed** | 0~1 |
+| 20-21 | `eye_unimpressed` | Unimpressed eyes (L/R) | 0~1 |
+| 22-23 | `eye_raised_lower_eyelid` | Raised lower eyelid (L/R) | 0~1 |
+| 24-25 | `iris_small` | Small iris (L/R) | 0~1 |
+| **26** | **`mouth_aaa`** | **Open mouth, 0=closed** | 0~1 |
+| 27 | `mouth_iii` | Wide mouth (vowel "i") | 0~1 |
+| 28 | `mouth_uuu` | Pursed mouth (vowel "u") | 0~1 |
+| 29 | `mouth_eee` | Wide mouth (vowel "e") | 0~1 |
+| 30 | `mouth_ooo` | Round mouth (vowel "o") | 0~1 |
+| 31 | `mouth_delta` | Mouth delta | 0~1 |
+| 32-33 | `mouth_lowered_corner` | Lowered mouth corners (L/R) | 0~1 |
+| 34-35 | `mouth_raised_corner` | Raised mouth corners (L/R) | 0~1 |
+| 36 | `mouth_smirk` | Smirk | 0~1 |
+| **37** | **`iris_rotation_x`** | **Eye vertical gaze** | -1~1 |
+| **38** | **`iris_rotation_y`** | **Eye horizontal gaze** | -1~1 |
+| **39** | **`head_x`** | **Head tilt up/down** | -1~1 |
+| **40** | **`head_y`** | **Head turn left/right** | -1~1 |
+| 41 | `neck_z` | Neck extension | -1~1 |
+| **42** | **`body_y`** | **Body lean left/right** | -1~1 |
+| 43 | `body_z` | Body lean forward/back | -1~1 |
+| **44** | **`breathing`** | **Breathing amplitude** | 0~1 |
+
+Source: `src/tha4/poser/modes/pose_parameters.py`.
+
+---
+
+### Using merged_fast.onnx in Production
+
+```python
+import numpy as np
+import onnxruntime as ort
+import simplejpeg
+from PIL import Image
+
+# 1. Load model (DirectML for Windows GPU, CUDA for Linux)
+sess = ort.InferenceSession("merged_fast.onnx",
+    providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
+
+# 2. Preprocess character image (once at startup)
+def load_image(path):
+    img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
+    # sRGB → linear
+    rgb = img[:,:,:3].copy()
+    m = rgb <= 0.04045
+    rgb[m] /= 12.92
+    rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
+    img[:,:,:3] = rgb
+    # premultiply alpha
+    img[:,:,:3] *= img[:,:,3:4]
+    # [0,1] → [-1,1]
+    img = img * 2.0 - 1.0
+    return img.transpose(2,0,1)[None].astype(np.float32)
+
+image_np = load_image("character.png")
+
+# 3. Infer every frame
+pose = np.zeros((1, 45), dtype=np.float32)
+pose[0,18] = pose[0,19] = 1.0   # close eyes
+pose[0,44] = 0.3                 # breathing
+
+rgb = sess.run(None, {"image": image_np, "pose": pose})[0]  # (1,3,512,512) uint8
+jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
+```
+
+---
+
+<a id="中文"></a>
+## 中文
+
+本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为 ONNX** 实现实时 GPU 推理——运行时无需 PyTorch。
+
+原始研究来自["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo)。本 Fork 增加了可直接用于生产环境的 ONNX 导出和 Web 演示。
+
+### 快速开始（Agent / 开发者用）
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/heshengtao/talking-head-anime-4-demo.git
+cd talking-head-anime-4-demo
+
+# 2. 安装 Python 环境
+python -m venv venv --prompt talking-head-anime-4-demo
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # Linux/Mac
+cd poetry && poetry install && cd ..
+
+# 3. 下载基础模型（必须）
+#    从 https://www.dropbox.com/scl/fi/7wec0sur7449iqgtlpi3n/tha4-models.zip?rlkey=0f9d1djmbvjjjn09469s1adx8&dl=1 下载
+#    解压到 → data/tha4/（包含 body_morpher.pt、face_morpher.pt 等）
+
+# 4. 下载姿态数据集（训练用，必须）
+#    从 https://www.dropbox.com/scl/fi/du10e6buzr5bslbe025qu/pose_dataset.pt?rlkey=y052g4n3xb14nu2elctzouc5x&dl=1 下载
+#    保存到 → data/pose_dataset.pt
+
+# 5. 准备角色图片和面部遮罩（见下文约束条件）
+
+# 6. 训练学生模型
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_face_morpher.py --config_file data/distill_examples/my_char/config.yaml
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_body_morpher.py --config_file data/distill_examples/my_char/config.yaml
+
+# 7. 组装并导出 ONNX
+python merge_onnx_fast.py data/distill_examples/my_char/character_model
+
+# 8. 测试
+python web_demo/server.py
+# 打开 http://localhost:8000
+```
+
+---
+
+### 完整步骤指南
+
+#### 第一步：搭建 Python 环境
+
+**要求:** Python 3.10.x、Poetry 1.7+、NVIDIA GPU（RTX 2080 以上）。
+
+```bash
+# 安装 Poetry（如未安装）
+(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+
+# 创建虚拟环境
+cd talking-head-anime-4-demo
+python -m venv venv --prompt talking-head-anime-4-demo
+
+# 激活
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # Linux/Mac
+
+# 安装依赖
+cd poetry && poetry install && cd ..
+```
+
+`pyproject.toml` 会自动安装 PyTorch 1.13.1+cu117、wxPython、OpenCV、MediaPipe 等全部依赖。
+
+#### 第二步：下载必要文件
+
+**THA4 基础模型**（Dropbox，约 200 MB）：
+```
+下载地址：https://www.dropbox.com/scl/fi/7wec0sur7449iqgtlpi3n/tha4-models.zip?rlkey=0f9d1djmbvjjjn09469s1adx8&dl=1
+解压到 → data/tha4/
+```
+
+预期文件：
+```
+data/tha4/
+  body_morpher.pt
+  eyebrow_decomposer.pt
+  eyebrow_morphing_combiner.pt
+  face_morpher.pt
+  upscaler.pt
+```
+
+**姿态数据集**（Dropbox，约 200 MB）：
+```
+下载地址：https://www.dropbox.com/scl/fi/du10e6buzr5bslbe025qu/pose_dataset.pt?rlkey=y052g4n3xb14nu2elctzouc5x&dl=1
+保存到 → data/pose_dataset.pt
+```
+
+#### 第三步：准备角色图片
+
+请参见下文 [输入图片约束条件](#输入图片约束条件)。
+
+将图片保存为：
+```
+data/images/my_char.png
+```
+
+#### 第四步：创建面部遮罩图片
+
+使用 [GIMP](https://www.gimp.org/)（免费开源软件）创建面部遮罩：
+
+1. 用 GIMP 打开 `my_char.png`
+2. 新建图层，填充**白色**
+3. 用画笔工具（黑色）涂抹**眼睛和嘴巴**区域
+4. 导出为 `my_char_face_mask.png`（512×512，RGB，无透明通道）
+
+参考文件：`data/images/lambda_00_face_mask.png` 和 `data/images/lambda_00_face_mask.xcf`。
+
+保存到：
+```
+data/images/my_char_face_mask.png
+```
+
+遮罩必须是黑白图像：
+- 白色 (255,255,255) = 模型可以修改的区域
+- 黑色 (0,0,0) = 眼睛和嘴巴区域（受保护）
+
+#### 第五步：创建训练配置
+
+创建 `data/distill_examples/my_char/config.yaml`：
+
+```yaml
+prefix: data/distill_examples/my_char
+character_image_file_name: data/images/my_char.png
+face_mask_image_file_name: data/images/my_char_face_mask.png
+face_morpher_random_seed_0: 12771885812175595441
+face_morpher_random_seed_1: 14367217090963479175
+body_morpher_random_seed_0: 2892221210020292507
+body_morpher_random_seed_1: 9998918537095922080
+num_cpu_workers: 1
+num_gpus: 1
+```
+
+创建工作目录：
+```bash
+mkdir data\distill_examples\my_char
+```
+
+#### 第六步：训练学生模型
+
+训练分两个阶段，顺序执行：
+
+**阶段一 — 面部模型**（约 100 万样本，RTX 4080 约 3 小时）：
+```bash
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_face_morpher.py --config_file data/distill_examples/my_char/config.yaml
+```
+
+**阶段二 — 身体模型**（约 150 万样本，RTX 4080 约 5 小时）：
+```bash
+venv\Scripts\python.exe -m torch.distributed.run --nnodes=1 --nproc_per_node=1 --standalone src\tha4\distiller\distill_body_morpher.py --config_file data/distill_examples/my_char/config.yaml
+```
+
+> **监控进度：** 运行 `tensorboard --logdir=data/distill_examples/my_char`，打开 `http://localhost:6006`。
+
+> **断点续训：** 如果训练中断，直接重新运行相同命令，训练框架自动从最新 snapshot 恢复。
+
+> **可选 GUI：** `bin\run.bat src\tha4\app\distiller_ui.py` 提供图形化配置和训练界面。
+
+#### 第七步：组装最终角色模型
+
+两个阶段都完成后，复制最终 checkpoint：
+
+```bash
+# 创建输出目录
+mkdir data\distill_examples\my_char\character_model
+
+# 复制最终面部模型（checkpoint 0010 = 100 万样本）
+copy data\distill_examples\my_char\face_morpher\checkpoint\0010\module_module.pt data\distill_examples\my_char\character_model\face_morpher.pt
+
+# 复制最终身体模型（checkpoint 0015 = 150 万样本）
+copy data\distill_examples\my_char\body_morpher\checkpoint\0015\module_module.pt data\distill_examples\my_char\character_model\body_morpher.pt
+
+# 复制角色原图
+copy data\images\my_char.png data\distill_examples\my_char\character_model\character.png
+```
+
+创建模型索引文件：
+```bash
+venv\Scripts\python.exe -c "
+import sys; sys.path.insert(0,'src')
+from tha4.charmodel.character_model import CharacterModel
+CharacterModel(
+    'data/distill_examples/my_char/character_model/character.png',
+    'data/distill_examples/my_char/character_model/face_morpher.pt',
+    'data/distill_examples/my_char/character_model/body_morpher.pt'
+).save('data/distill_examples/my_char/character_model/character_model.yaml')
+print('Done')
+"
+```
+
+最终结构：
+```
+data/distill_examples/my_char/character_model/
+  character_model.yaml
+  character.png        (~110-250 KB)
+  face_morpher.pt      (~480 KB)
+  body_morpher.pt      (~1.3 MB)
+```
+
+#### 第八步：导出 ONNX
+
+安装 ONNX 依赖：
+```bash
+pip install onnx onnxruntime simplejpeg
+# GPU 推理（Windows，无需 cuDNN）：
+pip install onnxruntime-directml==1.17.1
+# GPU 推理（Linux/Windows，需要 CUDA+cuDNN）：
+pip install onnxruntime-gpu
+```
+
+运行导出（推荐方案——GPU 后处理内嵌）：
+```bash
+python merge_onnx_fast.py data/distill_examples/my_char/character_model
+```
+
+输出：`data/distill_examples/my_char/character_model/onnx/merged_fast.onnx`（约 4.5 MB）。
+
+**模型输入输出：**
+
+| 端口 | 名称 | 形状 | 类型 | 说明 |
+|------|------|------|------|------|
+| 输入 | `image` | (1, 4, 512, 512) | float32 | 预处理后的角色图，[-1,1]，预乘 alpha |
+| 输入 | `pose` | (1, 45) | float32 | 45 维姿态参数 |
+| 输出 | `rgb` | (1, 3, 512, 512) | **uint8** | 最终 RGB 图像，sRGB，已复合深色背景 |
+
+> 无需 CPU 后处理——ONNX 图内已包含反除 alpha、sRGB 转换和背景复合，全部在 GPU 上完成。
+
+**其他导出方案：**
+| 脚本 | 输出 | 说明 |
+|------|------|------|
+| `export_onnx.py <dir>` | `face_morpher.onnx` + `body_morpher.onnx` | 两个独立模型 |
+| `merge_onnx.py <dir>` | `merged.onnx` | 单一模型，原始 [-1,1] 输出，需 CPU 后处理 |
+| `merge_onnx_fast.py <dir>` | `merged_fast.onnx` | **推荐** — uint8 RGB 输出，GPU 后处理内嵌 |
+
+#### 第九步：测试 ONNX 模型
+
+**命令行性能测试：**
+```bash
+venv\Scripts\python.exe -c "
+import onnxruntime, numpy as np, time, simplejpeg
+sess = onnxruntime.InferenceSession(
+    'data/distill_examples/my_char/character_model/onnx/merged_fast.onnx',
+    providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
+img = np.random.randn(1,4,512,512).astype(np.float32)
+pose = np.zeros((1,45), dtype=np.float32)
+for _ in range(20): sess.run(None, {'image':img, 'pose':pose})
+t0=time.perf_counter()
+for _ in range(60): _=sess.run(None, {'image':img, 'pose':pose})[0]
+t1=time.perf_counter()
+print(f'FPS: {60/(t1-t0):.0f}')
+"
+```
+
+预期：DirectML GPU 80+ fps（Windows），CPU 3-5 fps。
+
+**Web 交互测试：**
+```bash
+python web_demo/server.py
+```
+打开 `http://localhost:8000`——角色跟随鼠标、眨眼、呼吸。
+
+---
+
+<a id="输入图片约束条件"></a>
+### 输入图片约束条件
+
+为了让系统正常工作，输入图片必须满足以下约束：
+
+- **分辨率：** 必须为 512 × 512 像素（程序会自动缩放，但 512×512 效果最佳）。
+- **透明通道：** 必须是 RGBA 格式，背景透明（所有背景像素的 alpha = 0）。
+- **角色数量：** 只能包含一个类人角色。
+- **姿势：** 角色必须直立朝前。
+- **手部：** 手部应在头部下方且远离头部。
+- **头部位置：** 头部应大致位于图像上半部中央的 128 × 128 区域内。
+- **背景：** 所有背景像素的 alpha 值必须为 0。
+
+![合规输入图片示例](docs/images/input_spec.png)
+
+---
+
+### 姿态参数速查
+
+45 维姿态向量，控制角色表情和姿态：
+
+| 索引 | 名称 | 说明 | 范围 |
+|------|------|------|------|
+| 0-1 | `eyebrow_troubled` | 困扰眉（左/右） | 0~1 |
+| 2-3 | `eyebrow_angry` | 愤怒眉（左/右） | 0~1 |
+| 4-5 | `eyebrow_lowered` | 下压眉（左/右） | 0~1 |
+| 6-7 | `eyebrow_raised` | 上扬眉（左/右） | 0~1 |
+| 8-9 | `eyebrow_happy` | 开心眉（左/右） | 0~1 |
+| 10-11 | `eyebrow_serious` | 严肃眉（左/右） | 0~1 |
+| 12-13 | `eye_wink` | 眨眼（左/右） | 0~1 |
+| 14-15 | `eye_happy_wink` | 笑眼（左/右） | 0~1 |
+| 16-17 | `eye_surprised` | 惊讶眼（左/右） | 0~1 |
+| **18-19** | **`eye_relaxed`** | **闭眼（左/右），1=全闭** | 0~1 |
+| 20-21 | `eye_unimpressed` | 冷漠眼（左/右） | 0~1 |
+| 22-23 | `eye_raised_lower_eyelid` | 下眼皮上提（左/右） | 0~1 |
+| 24-25 | `iris_small` | 瞳孔缩小（左/右） | 0~1 |
+| **26** | **`mouth_aaa`** | **张嘴，0=闭嘴** | 0~1 |
+| 27 | `mouth_iii` | 咧嘴（元音 i） | 0~1 |
+| 28 | `mouth_uuu` | 噘嘴（元音 u） | 0~1 |
+| 29 | `mouth_eee` | 咧宽嘴（元音 e） | 0~1 |
+| 30 | `mouth_ooo` | 圆嘴（元音 o） | 0~1 |
+| 31 | `mouth_delta` | 嘴变化量 | 0~1 |
+| 32-33 | `mouth_lowered_corner` | 下压嘴角（左/右） | 0~1 |
+| 34-35 | `mouth_raised_corner` | 上扬嘴角（左/右） | 0~1 |
+| 36 | `mouth_smirk` | 撇嘴 | 0~1 |
+| **37** | **`iris_rotation_x`** | **眼球垂直注视** | -1~1 |
+| **38** | **`iris_rotation_y`** | **眼球水平注视** | -1~1 |
+| **39** | **`head_x`** | **头部上下点头** | -1~1 |
+| **40** | **`head_y`** | **头部左右转动** | -1~1 |
+| 41 | `neck_z` | 颈部伸缩 | -1~1 |
+| **42** | **`body_y`** | **身体左右倾** | -1~1 |
+| 43 | `body_z` | 身体前后倾 | -1~1 |
+| **44** | **`breathing`** | **呼吸幅度** | 0~1 |
+
+来源：`src/tha4/poser/modes/pose_parameters.py`。
+
+---
+
+### 生产环境使用 merged_fast.onnx
+
+```python
+import numpy as np
+import onnxruntime as ort
+import simplejpeg
+from PIL import Image
+
+# 1. 加载模型（Windows 用 DirectML GPU，Linux 用 CUDA）
+sess = ort.InferenceSession("merged_fast.onnx",
+    providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
+
+# 2. 预处理角色图片（启动时执行一次即可）
+def load_image(path):
+    img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
+    # sRGB → linear
+    rgb = img[:,:,:3].copy()
+    m = rgb <= 0.04045
+    rgb[m] /= 12.92
+    rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
+    img[:,:,:3] = rgb
+    # premultiply alpha
+    img[:,:,:3] *= img[:,:,3:4]
+    # [0,1] → [-1,1]
+    img = img * 2.0 - 1.0
+    return img.transpose(2,0,1)[None].astype(np.float32)
+
+image_np = load_image("character.png")
+
+# 3. 每帧推理
+pose = np.zeros((1, 45), dtype=np.float32)
+pose[0,18] = pose[0,19] = 1.0   # 闭眼
+pose[0,44] = 0.3                 # 呼吸
+
+rgb = sess.run(None, {"image": image_np, "pose": pose})[0]  # (1,3,512,512) uint8
+jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
+```
+
+---
+
+### License
+
+- Code: MIT License
+- THA4 models and images under `data/images/`: CC BY-NC 4.0
+
+[Back to top](#tha4-student-model-training--onnx-export-pipeline)
