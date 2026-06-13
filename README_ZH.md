@@ -6,12 +6,16 @@
 > 把下面这个链接发给它，即可在 AI 引导下完成全部流程：
 >
 > ```
-> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> curl -fsSL https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
+>
+> **Super Agent Party 用户注意：** 请导入 `merged_fast.onnx`，其他 ONNX 版本不受支持。
 
 ---
 
-本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为 ONNX** 实现实时 GPU 推理——运行时无需 PyTorch。
+本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为 `merged_fast.onnx`**——这是唯一需要的 ONNX 格式，可实现纯 ONNX GPU 实时推理，完全无需 PyTorch。
+
+> **`merged_fast.onnx` 是目标产物。** 它将 GPU 后处理（反除 alpha、sRGB 转换、背景复合）全部内嵌到 ONNX 图中，直接输出 uint8 RGB，帧率 80+ fps。
 
 原始研究来自 ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo)。本 Fork 增加了可直接用于生产环境的 ONNX 导出和 Web 演示。
 
@@ -238,13 +242,6 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 | 输出 | `rgb` | (1, 3, 512, 512) | **uint8** | 最终 RGB 图像，sRGB，已复合深色背景 |
 
 > 无需 CPU 后处理——ONNX 图内已包含反除 alpha、sRGB 转换和背景复合，全部在 GPU 上完成。
-
-**其他导出方案：**
-| 脚本 | 输出 | 说明 |
-|------|------|------|
-| `export_onnx.py <dir>` | `face_morpher.onnx` + `body_morpher.onnx` | 两个独立模型 |
-| `merge_onnx.py <dir>` | `merged.onnx` | 单一模型，原始 [-1,1] 输出，需 CPU 后处理 |
-| `merge_onnx_fast.py <dir>` | `merged_fast.onnx` | **推荐** — uint8 RGB 输出，GPU 后处理内嵌 |
 
 #### 第九步：测试 ONNX 模型
 

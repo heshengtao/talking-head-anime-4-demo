@@ -6,9 +6,12 @@
 
 ## Task Overview
 
-Train a lightweight student model from a single anime character image, then export to `merged_fast.onnx` for real-time GPU inference without PyTorch.
+Train a lightweight student model from a single anime character image, then export to **`merged_fast.onnx`** for real-time GPU inference without PyTorch.
 
-**Estimated time:** ~8 hours on RTX 4080 | **Output:** `merged_fast.onnx` (~4.5 MB)
+> **The only output you need is `merged_fast.onnx`.**  
+> It outputs ready-to-use uint8 RGB at 80+ fps. No CPU post-processing required.  
+> **Super Agent Party** and other deployment tools import this exact file.  
+> Ignore `export_onnx.py` and `merge_onnx.py` — they produce alternative formats not needed for production use.
 
 ---
 
@@ -232,6 +235,8 @@ venv\Scripts\python.exe -m pip install onnxruntime-directml==1.17.1
 
 ## Step 9: Export to merged_fast.onnx
 
+This is the **only** export script you need.
+
 ```bash
 python merge_onnx_fast.py data/distill_examples/my_char/character_model
 ```
@@ -246,7 +251,7 @@ Output file: `data/distill_examples/my_char/character_model/onnx/merged_fast.onn
 | Input | `pose` | (1, 45) | float32 |
 | Output | `rgb` | (1, 3, 512, 512) | **uint8** |
 
-The output is ready-to-use sRGB RGB on dark background (#1a1a2e). No CPU post-processing needed.
+The output is ready-to-use sRGB RGB on dark background (#1a1a2e). No CPU post-processing needed. This is the format used by **Super Agent Party** and other deployment tools.
 
 ---
 
@@ -351,12 +356,20 @@ jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1, 2, 0), quality=75)
 | `README.md` | English human-readable guide |
 | `README_ZH.md` | Chinese human-readable guide |
 | `README_AGENT.md` | This file — optimized for AI agents |
-| `export_onnx.py` | Export face/body to separate ONNX files |
-| `merge_onnx.py` | Merge into single `merged.onnx` |
-| `merge_onnx_fast.py` | Merge into `merged_fast.onnx` (GPU post-process baked in) |
+| **`merge_onnx_fast.py`** | **Export `merged_fast.onnx` — the only script you need** |
 | `web_demo/server.py` | Web demo server (mouse tracking + idle animation) |
 | `web_demo/static/index.html` | Web demo frontend |
 | `onnx_test/compare.py` | ONNX vs PyTorch validation script |
+
+<details>
+<summary>Advanced: other export scripts (not needed for normal use)</summary>
+
+| File | Purpose |
+|------|---------|
+| `export_onnx.py` | Export face/body to separate ONNX files |
+| `merge_onnx.py` | Merge into raw `merged.onnx` (needs CPU post-process) |
+
+</details>
 
 ## License
 

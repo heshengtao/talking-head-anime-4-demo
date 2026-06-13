@@ -6,12 +6,16 @@
 > Send it the raw URL of the agent instructions:
 >
 > ```
-> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> curl -fsSL https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
+>
+> **Super Agent Party users:** Import `merged_fast.onnx`. Other ONNX variants are not supported.
 
 ---
 
-This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to ONNX** for real-time GPU inference — no PyTorch dependency at runtime.
+This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to `merged_fast.onnx`** — the only ONNX format needed for real-time GPU inference with zero PyTorch dependency.
+
+> **`merged_fast.onnx` is the target output.** It bakes GPU post-processing (un-premultiply, sRGB, background composite) directly into the ONNX graph, outputting ready-to-use uint8 RGB at 80+ fps.
 
 The original research is from ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo). This fork adds production-ready ONNX export and a web demo.
 
@@ -236,13 +240,6 @@ Output: `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~
 | Output | `rgb` | (1, 3, 512, 512) | **uint8** | Final RGB image, sRGB, composited on dark background |
 
 > No CPU post-processing needed — the ONNX graph handles un-premultiply, sRGB conversion, and background compositing on GPU.
-
-**Alternative exports:**
-| Script | Output | Notes |
-|--------|--------|-------|
-| `export_onnx.py <dir>` | `face_morpher.onnx` + `body_morpher.onnx` | Two separate models |
-| `merge_onnx.py <dir>` | `merged.onnx` | Single model, raw [-1,1] output, needs CPU post-processing |
-| `merge_onnx_fast.py <dir>` | `merged_fast.onnx` | **Recommended** — uint8 RGB output, GPU post-processing baked in |
 
 #### Step 9: Test the ONNX Model
 
