@@ -6,11 +6,18 @@
 
 ## Task Overview
 
-Train a lightweight student model from a single anime character image, then export to **`merged_fast.onnx`** for real-time GPU inference without PyTorch.
+Train a lightweight student model from a single anime character image, then export to a deployable ZIP containing:
 
-> **The only output you need is `merged_fast.onnx`.**  
-> It outputs ready-to-use uint8 RGB at 80+ fps. No CPU post-processing required.  
-> **Super Agent Party** and other deployment tools import this exact file.  
+```
+output/<model_name>.zip
+  ├── merged_fast.onnx    ← GPU-accelerated model (green-screen chroma-key, 80+ fps, uint8 RGB)
+  └── character.png        ← original texture for chroma-key compositing
+```
+
+> **merged_fast.onnx uses green screen (`#00FF00`) background.** Frontends (Super Agent Party, etc.) chroma-key the green to restore transparency. This avoids dark-background conflicts with dark clothing.
+>
+> **The ZIP is the only deployable artifact.** Import it directly into Super Agent Party or your own app.
+>
 > Ignore `export_onnx.py` and `merge_onnx.py` — they produce alternative formats not needed for production use.
 
 ---
@@ -233,25 +240,50 @@ venv\Scripts\python.exe -m pip install onnxruntime-directml==1.17.1
 
 ---
 
-## Step 9: Export to merged_fast.onnx
+## Step 9: Export to merged_fast.onnx + Package ZIP
 
-This is the **only** export script you need.
+This is the **only** export script you need. It produces the green-screen model AND automatically packages it with the character texture into a deployable ZIP.
 
 ```bash
 python merge_onnx_fast.py data/distill_examples/my_char/character_model
 ```
 
-Output file: `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~4.5 MB)
+**Output files:**
 
-**Model specification:**
+| File | Location |
+|------|----------|
+| `merged_fast.onnx` | `data/distill_examples/my_char/character_model/onnx/` |
+| **`my_char.zip`** | **`output/`** ← deployable artifact |
 
-| Port | Name | Shape | Type |
-|------|------|-------|------|
-| Input | `image` | (1, 4, 512, 512) | float32 |
-| Input | `pose` | (1, 45) | float32 |
-| Output | `rgb` | (1, 3, 512, 512) | **uint8** |
+The ZIP contains:
+```
+my_char.zip
+  ├── merged_fast.onnx    (~4.5 MB) — green-screen chroma-key model
+  └── character.png        (~110-250 KB) — original texture
+```
 
-The output is ready-to-use sRGB RGB on dark background (#1a1a2e). No CPU post-processing needed. This is the format used by **Super Agent Party** and other deployment tools.
+**Model specification (merged_fast.onnx):**
+
+| Port | Name | Shape | Type | Description |
+|------|------|-------|------|-------------|
+| Input | `image` | (1, 4, 512, 512) | float32 | Preprocessed texture in [-1,1], premultiplied alpha |
+| Input | `pose` | (1, 45) | float32 | 45 pose parameters |
+| Output | `rgb` | (1, 3, 512, 512) | **uint8** | sRGB RGB on green (#00FF00) background |
+
+> The green background is designed for chroma-key removal. Dark clothing (black/navy) is NOT affected — only the bright green background area is keyed out by the frontend.
+
+**How to use in frontend (chroma-key):**
+```js
+// Canvas 2D green screen removal
+const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+const d = imgData.data;
+for (let i = 0; i < d.length; i += 4) {
+    if (d[i] < 80 && d[i+1] > 180 && d[i+2] < 80) {
+        d[i+3] = 0; // green → transparent
+    }
+}
+ctx.putImageData(imgData, 0, 0);
+```
 
 ---
 
@@ -321,27 +353,36 @@ Full parameter list: `src/tha4/poser/modes/pose_parameters.py`
 ## Production Inference Code
 
 ```python
-import numpy as np, onnxruntime as ort, simplejpeg
+import numpy as np, onnxruntime as ort, simplejpeg, zipfile
 from PIL import Image
 
-sess = ort.InferenceSession("merged_fast.onnx",
+# 1. Extract model and texture from ZIP
+with zipfile.ZipFile("my_char.zip") as zf:
+    zf.extractall("my_char_model")
+
+onnx_path = "my_char_model/merged_fast.onnx"
+tex_path  = "my_char_model/character.png"
+
+# 2. Load model
+sess = ort.InferenceSession(onnx_path,
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-def load_image(path):
+# 3. Preprocess texture (once at startup)
+def load_texture(path):
     img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
     rgb = img[:,:,:3].copy()
     m = rgb <= 0.04045; rgb[m] /= 12.92
     rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
     img[:,:,:3] = rgb
-    img[:,:,:3] *= img[:,:,3:4]
-    img = img * 2.0 - 1.0
+    img[:,:,:3] *= img[:,:,3:4]          # premultiply alpha
+    img = img * 2.0 - 1.0                 # [0,1] → [-1,1]
     return img.transpose(2,0,1)[None].astype(np.float32)
 
-image_np = load_image("character.png")
+image_np = load_texture(tex_path)
 
+# 4. Infer every frame (green-screen RGB output)
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0, 18] = pose[0, 19] = 1.0   # close eyes
-pose[0, 44] = 0.3                   # breathing
 
 rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1, 2, 0), quality=75)

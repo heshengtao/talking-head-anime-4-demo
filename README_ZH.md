@@ -6,16 +6,16 @@
 > 把下面这个链接发给它，即可在 AI 引导下完成全部流程：
 >
 > ```
-> curl -fsSL https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party 用户注意：** 请导入 `merged_fast.onnx`，其他 ONNX 版本不受支持。
+> **Super Agent Party 用户：** 导入生成的 ZIP 文件（`output/<名称>.zip`），内含 `merged_fast.onnx`（绿幕抠图模型）+ `character.png`（纹理图）。
 
 ---
 
-本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为 `merged_fast.onnx`**——这是唯一需要的 ONNX 格式，可实现纯 ONNX GPU 实时推理，完全无需 PyTorch。
+本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为可部署的 ZIP 包**，实现纯 ONNX GPU 实时推理——完全无需 PyTorch。
 
-> **`merged_fast.onnx` 是目标产物。** 它将 GPU 后处理（反除 alpha、sRGB 转换、背景复合）全部内嵌到 ONNX 图中，直接输出 uint8 RGB，帧率 80+ fps。
+> **最终产物：** `output/<名称>.zip` — 包含 `merged_fast.onnx`（80+ fps，绿幕背景 `#00FF00`）和 `character.png`。前端通过色键抠绿恢复透明通道。
 
 原始研究来自 ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo)。本 Fork 增加了可直接用于生产环境的 ONNX 导出和 Web 演示。
 
@@ -225,23 +225,25 @@ pip install onnxruntime-directml==1.17.1
 # GPU 推理（Linux/Windows，需要 CUDA+cuDNN）：
 pip install onnxruntime-gpu
 ```
+运行导出（推荐方案——GPU 后处理内嵌，自动打包）：
 
-运行导出（推荐方案——GPU 后处理内嵌）：
 ```bash
 python merge_onnx_fast.py data/distill_examples/my_char/character_model
 ```
 
-输出：`data/distill_examples/my_char/character_model/onnx/merged_fast.onnx`（约 4.5 MB）。
+输出：
+- `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx`（约 4.5 MB）——绿幕抠图模型
+- **`output/my_char.zip`**——可部署的 ZIP 包，内含 `merged_fast.onnx` + `character.png`
 
-**模型输入输出：**
+**模型输入输出（merged_fast.onnx）：**
 
 | 端口 | 名称 | 形状 | 类型 | 说明 |
 |------|------|------|------|------|
-| 输入 | `image` | (1, 4, 512, 512) | float32 | 预处理后的角色图，[-1,1]，预乘 alpha |
+| 输入 | `image` | (1, 4, 512, 512) | float32 | 预处理后的纹理图，[-1,1]，预乘 alpha |
 | 输入 | `pose` | (1, 45) | float32 | 45 维姿态参数 |
-| 输出 | `rgb` | (1, 3, 512, 512) | **uint8** | 最终 RGB 图像，sRGB，已复合深色背景 |
+| 输出 | `rgb` | (1, 3, 512, 512) | **uint8** | sRGB 图像，绿色背景（#00FF00） |
 
-> 无需 CPU 后处理——ONNX 图内已包含反除 alpha、sRGB 转换和背景复合，全部在 GPU 上完成。
+> 绿幕 `#00FF00`——前端通过色键抠绿恢复透明。深色衣服不受影响。
 
 #### 第九步：测试 ONNX 模型
 
@@ -329,41 +331,38 @@ python web_demo/server.py
 
 ---
 
-### 生产环境使用 merged_fast.onnx
+### 生产环境使用
 
 ```python
-import numpy as np
-import onnxruntime as ort
-import simplejpeg
+import numpy as np, onnxruntime as ort, simplejpeg, zipfile
 from PIL import Image
 
-# 1. 加载模型（Windows 用 DirectML GPU，Linux 用 CUDA）
-sess = ort.InferenceSession("merged_fast.onnx",
+# 1. 解压 ZIP 包
+with zipfile.ZipFile("my_char.zip") as zf:
+    zf.extractall("my_char_model")
+
+# 2. 加载模型（Windows 用 DirectML GPU，Linux 用 CUDA）
+sess = ort.InferenceSession("my_char_model/merged_fast.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 2. 预处理角色图片（启动时执行一次即可）
-def load_image(path):
+# 3. 预处理纹理图（启动时执行一次即可）
+def load_texture(path):
     img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-    # sRGB → linear
     rgb = img[:,:,:3].copy()
-    m = rgb <= 0.04045
-    rgb[m] /= 12.92
+    m = rgb <= 0.04045; rgb[m] /= 12.92
     rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
     img[:,:,:3] = rgb
-    # premultiply alpha
     img[:,:,:3] *= img[:,:,3:4]
-    # [0,1] → [-1,1]
     img = img * 2.0 - 1.0
     return img.transpose(2,0,1)[None].astype(np.float32)
 
-image_np = load_image("character.png")
+image_np = load_texture("my_char_model/character.png")
 
-# 3. 每帧推理
+# 4. 每帧推理（绿幕 RGB → 前端色键抠绿）
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0,18] = pose[0,19] = 1.0   # 闭眼
-pose[0,44] = 0.3                 # 呼吸
 
-rgb = sess.run(None, {"image": image_np, "pose": pose})[0]  # (1,3,512,512) uint8
+rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
 ```
 

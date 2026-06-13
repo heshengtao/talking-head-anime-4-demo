@@ -6,16 +6,16 @@
 > Send it the raw URL of the agent instructions:
 >
 > ```
-> curl -fsSL https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party users:** Import `merged_fast.onnx`. Other ONNX variants are not supported.
+> **Super Agent Party users:** Import the generated ZIP file (`output/<name>.zip`). It contains `merged_fast.onnx` (green-screen chroma-key model) + `character.png` (texture).
 
 ---
 
-This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to `merged_fast.onnx`** — the only ONNX format needed for real-time GPU inference with zero PyTorch dependency.
+This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to a deployable ZIP** for real-time GPU inference — no PyTorch dependency at runtime.
 
-> **`merged_fast.onnx` is the target output.** It bakes GPU post-processing (un-premultiply, sRGB, background composite) directly into the ONNX graph, outputting ready-to-use uint8 RGB at 80+ fps.
+> **Final output:** `output/<name>.zip` — contains `merged_fast.onnx` (80+ fps, green-screen background `#00FF00`) and `character.png`. Frontends chroma-key the green to restore transparency.
 
 The original research is from ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo). This fork adds production-ready ONNX export and a web demo.
 
@@ -223,23 +223,25 @@ pip install onnx onnxruntime simplejpeg
 # For GPU: pip install onnxruntime-directml==1.17.1  (Windows, no cuDNN needed)
 # Or:       pip install onnxruntime-gpu                (Linux/Win, requires CUDA+cuDNN)
 ```
+Run the export (recommended — GPU post-processing baked in, auto-packaged):
 
-Run the export (recommended — GPU post-processing baked in):
 ```bash
 python merge_onnx_fast.py data/distill_examples/my_char/character_model
 ```
 
-Output: `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~4.5 MB).
+Output:
+- `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~4.5 MB) — green-screen model
+- **`output/my_char.zip`** — deployable artifact with `merged_fast.onnx` + `character.png`
 
-**Model I/O:**
+**Model I/O (merged_fast.onnx):**
 
 | Port | Name | Shape | Type | Description |
 |------|------|-------|------|-------------|
-| Input | `image` | (1, 4, 512, 512) | float32 | Preprocessed character image in [-1,1] with premultiplied alpha |
-| Input | `pose` | (1, 45) | float32 | 45 pose parameters (see table below) |
-| Output | `rgb` | (1, 3, 512, 512) | **uint8** | Final RGB image, sRGB, composited on dark background |
+| Input | `image` | (1, 4, 512, 512) | float32 | Preprocessed texture in [-1,1] with premultiplied alpha |
+| Input | `pose` | (1, 45) | float32 | 45 pose parameters |
+| Output | `rgb` | (1, 3, 512, 512) | **uint8** | sRGB RGB on green (#00FF00) background |
 
-> No CPU post-processing needed — the ONNX graph handles un-premultiply, sRGB conversion, and background compositing on GPU.
+> Green screen `#00FF00` — frontends chroma-key the green to restore transparency. Dark clothing is not affected.
 
 #### Step 9: Test the ONNX Model
 
@@ -327,41 +329,38 @@ Source: `src/tha4/poser/modes/pose_parameters.py`.
 
 ---
 
-### Using merged_fast.onnx in Production
+### Using the Deployable ZIP in Production
 
 ```python
-import numpy as np
-import onnxruntime as ort
-import simplejpeg
+import numpy as np, onnxruntime as ort, simplejpeg, zipfile
 from PIL import Image
 
-# 1. Load model (DirectML for Windows GPU, CUDA for Linux)
-sess = ort.InferenceSession("merged_fast.onnx",
+# 1. Extract ZIP
+with zipfile.ZipFile("my_char.zip") as zf:
+    zf.extractall("my_char_model")
+
+# 2. Load model (DirectML for Windows GPU, CUDA for Linux)
+sess = ort.InferenceSession("my_char_model/merged_fast.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 2. Preprocess character image (once at startup)
-def load_image(path):
+# 3. Preprocess texture (once at startup)
+def load_texture(path):
     img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-    # sRGB → linear
     rgb = img[:,:,:3].copy()
-    m = rgb <= 0.04045
-    rgb[m] /= 12.92
+    m = rgb <= 0.04045; rgb[m] /= 12.92
     rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
     img[:,:,:3] = rgb
-    # premultiply alpha
     img[:,:,:3] *= img[:,:,3:4]
-    # [0,1] → [-1,1]
     img = img * 2.0 - 1.0
     return img.transpose(2,0,1)[None].astype(np.float32)
 
-image_np = load_image("character.png")
+image_np = load_texture("my_char_model/character.png")
 
-# 3. Infer every frame
+# 4. Infer every frame (green-screen RGB → chroma-key in frontend)
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0,18] = pose[0,19] = 1.0   # close eyes
-pose[0,44] = 0.3                 # breathing
 
-rgb = sess.run(None, {"image": image_np, "pose": pose})[0]  # (1,3,512,512) uint8
+rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
 ```
 

@@ -9,7 +9,7 @@ Example:
     python merge_onnx_fast.py data/character_models/lambda_00
     python merge_onnx_fast.py data/distill_examples/lambda_02/character_model
 """
-import sys, os
+import sys, os, zipfile, shutil
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import torch
@@ -20,6 +20,11 @@ from torch.nn import Module
 from torch.nn.functional import grid_sample, interpolate
 
 THA4_SRC = os.path.join(os.path.dirname(__file__), "src")
+
+# Green screen background for chroma-key (R, G, B)
+BG_COLOR = [0, 255, 0]  # pure green #00FF00
+
+PROJECT_ROOT = os.path.dirname(__file__)
 sys.path.insert(0, THA4_SRC)
 
 from tha4.nn.siren.face_morpher.siren_face_morpher_00 import (
@@ -54,7 +59,7 @@ class MergedFastPipeline(Module):
         self.bm_args = body_morpher.args
         self.register_buffer(
             'bg',
-            torch.tensor([26, 26, 46], dtype=torch.float32).view(3, 1, 1) / 255)
+            torch.tensor(BG_COLOR, dtype=torch.float32).view(3, 1, 1) / 255)
 
     def forward(self, image: Tensor, pose: Tensor) -> Tensor:
         n = pose.shape[0]
@@ -199,6 +204,31 @@ def main():
     diff = np.abs(torch_out.astype(float) - onnx_out.astype(float)).max()
     print(f"  Max diff (PyTorch vs ONNX): {diff:.1f}")
     print("  Export OK!")
+
+    # ── Package output ────────────────────────────────────
+    char_png = os.path.join(model_dir, "character.png")
+    if not os.path.exists(char_png):
+        # try fallback paths
+        alt = os.path.join(os.path.dirname(model_dir), "..", "..", "images",
+                           os.path.basename(os.path.dirname(model_dir)) + ".png")
+        if os.path.exists(alt):
+            char_png = alt
+
+    if os.path.exists(char_png):
+        model_name = os.path.basename(model_dir.rstrip('/\\'))
+        output_dir = os.path.join(PROJECT_ROOT, "output")
+        os.makedirs(output_dir, exist_ok=True)
+        zip_path = os.path.join(output_dir, f"{model_name}.zip")
+
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(out_path, "merged_fast.onnx")
+            zf.write(char_png, "character.png")
+
+        zip_size = os.path.getsize(zip_path) / 1024
+        print(f"  Packaged: {zip_path} ({zip_size:.0f} KB)")
+        print(f"  Contents: merged_fast.onnx + character.png")
+    else:
+        print(f"  WARNING: character.png not found, skipping ZIP packaging")
 
 
 if __name__ == "__main__":
