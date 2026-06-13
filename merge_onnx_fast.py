@@ -221,12 +221,12 @@ def main():
         zip_path = os.path.join(output_dir, f"{model_name}.zip")
 
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.write(out_path, "merged_fast.onnx")
+            zf.write(out_path, "model.onnx")
             zf.write(char_png, "character.png")
 
         zip_size = os.path.getsize(zip_path) / 1024
         print(f"  Packaged: {zip_path} ({zip_size:.0f} KB)")
-        print(f"  Contents: merged_fast.onnx + character.png")
+        print(f"  Contents: model.onnx + character.png")
     else:
         print(f"  WARNING: character.png not found, skipping ZIP packaging")
 

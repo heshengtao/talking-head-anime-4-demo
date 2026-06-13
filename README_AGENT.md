@@ -10,11 +10,11 @@ Train a lightweight student model from a single anime character image, then expo
 
 ```
 output/<model_name>.zip
-  ├── merged_fast.onnx    ← GPU-accelerated model (green-screen chroma-key, 80+ fps, uint8 RGB)
+  ├── model.onnx          ← GPU-accelerated model (green-screen chroma-key, 80+ fps, uint8 RGB)
   └── character.png        ← original texture for chroma-key compositing
 ```
 
-> **merged_fast.onnx uses green screen (`#00FF00`) background.** Frontends (Super Agent Party, etc.) chroma-key the green to restore transparency. This avoids dark-background conflicts with dark clothing.
+> **model.onnx uses green screen (`#00FF00`) background.** Frontends (Super Agent Party, etc.) chroma-key the green to restore transparency. This avoids dark-background conflicts with dark clothing.
 >
 > **The ZIP is the only deployable artifact.** Import it directly into Super Agent Party or your own app.
 >
@@ -258,7 +258,7 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 The ZIP contains:
 ```
 my_char.zip
-  ├── merged_fast.onnx    (~4.5 MB) — green-screen chroma-key model
+  ├── model.onnx          (~4.5 MB) — green-screen chroma-key model
   └── character.png        (~110-250 KB) — original texture
 ```
 
@@ -360,7 +360,7 @@ from PIL import Image
 with zipfile.ZipFile("my_char.zip") as zf:
     zf.extractall("my_char_model")
 
-onnx_path = "my_char_model/merged_fast.onnx"
+onnx_path = "my_char_model/model.onnx"
 tex_path  = "my_char_model/character.png"
 
 # 2. Load model
