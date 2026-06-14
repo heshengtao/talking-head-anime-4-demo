@@ -51,5 +51,13 @@ temp/
 
 venv/*
 
-# io dump to ABCI tasks
-*.o*
+# THA4 ONNX export outputs
+output/
+onnx_test/debug_*.png
+onnx_test/diff_*.png
+onnx_test/onnx_*.png
+onnx_test/pytorch_*.png
+onnx_test/00_*.png
+onnx_test/01_*.png
+onnx_test/02_*.png
+*.xcf
