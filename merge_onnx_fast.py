@@ -220,13 +220,18 @@ def main():
         os.makedirs(output_dir, exist_ok=True)
         zip_path = os.path.join(output_dir, f"{model_name}.zip")
 
+        # ── Step 1: bake texture into ONNX (single-input model) ──
+        from bake_texture import bake
+        baked_path = os.path.join(onnx_dir, "merged_baked.onnx")
+        bake(out_path, char_png, baked_path)
+
+        # ── Step 2: package baked ONNX into ZIP (no separate texture needed) ──
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.write(out_path, "model.onnx")
-            zf.write(char_png, "character.png")
+            zf.write(baked_path, "model.onnx")
 
         zip_size = os.path.getsize(zip_path) / 1024
         print(f"  Packaged: {zip_path} ({zip_size:.0f} KB)")
-        print(f"  Contents: model.onnx + character.png")
+        print(f"  Contents: model.onnx (texture baked in, single-input)")
     else:
         print(f"  WARNING: character.png not found, skipping ZIP packaging")
 

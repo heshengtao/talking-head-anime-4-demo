@@ -6,17 +6,18 @@
 
 ## Task Overview
 
-Train a lightweight student model from a single anime character image, then export to a deployable ZIP containing:
+Train a lightweight student model from a single anime character image, then export to a deployable **single-input** ONNX model:
 
 ```
 output/<model_name>.zip
-  ├── model.onnx          ← GPU-accelerated model (green-screen chroma-key, 80+ fps, uint8 RGB)
-  └── character.png        ← original texture for chroma-key compositing
+  └── model.onnx  ← single-input (pose only), green-screen chroma-key, 80+ fps, uint8 RGB
 ```
 
-> **model.onnx uses green screen (`#00FF00`) background.** Frontends (Super Agent Party, etc.) chroma-key the green to restore transparency. This avoids dark-background conflicts with dark clothing.
+> **model.onnx has the character texture baked in.** No separate `character.png` needed at runtime. Just pass a 45-dim pose vector and receive the rendered frame.
 >
-> **The ZIP is the only deployable artifact.** Import it directly into Super Agent Party or your own app.
+> **Green screen (`#00FF00`) background.** Frontends (Super Agent Party, etc.) chroma-key the green to restore transparency. Dark clothing is not affected.
+>
+> **This ZIP is the only deployable artifact.** Import it directly into Super Agent Party or your own app.
 >
 > Ignore `export_onnx.py` and `merge_onnx.py` — they produce alternative formats not needed for production use.
 
@@ -240,50 +241,39 @@ venv\Scripts\python.exe -m pip install onnxruntime-directml==1.17.1
 
 ---
 
-## Step 9: Export to merged_fast.onnx + Package ZIP
+## Step 9: Export to model.onnx + Package ZIP
 
-This is the **only** export script you need. It produces the green-screen model AND automatically packages it with the character texture into a deployable ZIP.
+This is the **only** export script you need. It:
+1. Exports `merged_fast.onnx` (GPU-post-processed, green screen)
+2. **Bakes the texture into the model** → single-input `merged_baked.onnx`
+3. Packages as `model.onnx` in a deployable ZIP
 
 ```bash
 python merge_onnx_fast.py data/distill_examples/my_char/character_model
 ```
 
-**Output files:**
+**Output:**
 
 | File | Location |
 |------|----------|
 | `merged_fast.onnx` | `data/distill_examples/my_char/character_model/onnx/` |
+| `merged_baked.onnx` | `data/distill_examples/my_char/character_model/onnx/` |
 | **`my_char.zip`** | **`output/`** ← deployable artifact |
 
-The ZIP contains:
+The ZIP contains a single file:
 ```
 my_char.zip
-  ├── model.onnx          (~4.5 MB) — green-screen chroma-key model
-  └── character.png        (~110-250 KB) — original texture
+  └── model.onnx          (~8.6 MB) — texture baked in, single-input
 ```
 
-**Model specification (merged_fast.onnx):**
+**Model specification:**
 
 | Port | Name | Shape | Type | Description |
 |------|------|-------|------|-------------|
-| Input | `image` | (1, 4, 512, 512) | float32 | Preprocessed texture in [-1,1], premultiplied alpha |
 | Input | `pose` | (1, 45) | float32 | 45 pose parameters |
 | Output | `rgb` | (1, 3, 512, 512) | **uint8** | sRGB RGB on green (#00FF00) background |
 
-> The green background is designed for chroma-key removal. Dark clothing (black/navy) is NOT affected — only the bright green background area is keyed out by the frontend.
-
-**How to use in frontend (chroma-key):**
-```js
-// Canvas 2D green screen removal
-const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-const d = imgData.data;
-for (let i = 0; i < d.length; i += 4) {
-    if (d[i] < 80 && d[i+1] > 180 && d[i+2] < 80) {
-        d[i+3] = 0; // green → transparent
-    }
-}
-ctx.putImageData(imgData, 0, 0);
-```
+> **Single input!** The character texture is baked into the ONNX graph as a constant. No separate image file or runtime preprocessing needed.
 
 ---
 
@@ -354,38 +344,29 @@ Full parameter list: `src/tha4/poser/modes/pose_parameters.py`
 
 ```python
 import numpy as np, onnxruntime as ort, simplejpeg, zipfile
-from PIL import Image
 
-# 1. Extract model and texture from ZIP
+# 1. Extract model from ZIP (single file)
 with zipfile.ZipFile("my_char.zip") as zf:
     zf.extractall("my_char_model")
 
-onnx_path = "my_char_model/model.onnx"
-tex_path  = "my_char_model/character.png"
-
-# 2. Load model
-sess = ort.InferenceSession(onnx_path,
+# 2. Load model — no texture preprocessing needed!
+sess = ort.InferenceSession("my_char_model/model.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 3. Preprocess texture (once at startup)
-def load_texture(path):
-    img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-    rgb = img[:,:,:3].copy()
-    m = rgb <= 0.04045; rgb[m] /= 12.92
-    rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
-    img[:,:,:3] = rgb
-    img[:,:,:3] *= img[:,:,3:4]          # premultiply alpha
-    img = img * 2.0 - 1.0                 # [0,1] → [-1,1]
-    return img.transpose(2,0,1)[None].astype(np.float32)
-
-image_np = load_texture(tex_path)
-
-# 4. Infer every frame (green-screen RGB output)
+# 3. Infer every frame — just pass pose, no image input
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0, 18] = pose[0, 19] = 1.0   # close eyes
 
-rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
+rgb = sess.run(None, {"pose": pose})[0]  # (1, 3, 512, 512) uint8
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1, 2, 0), quality=75)
+```
+
+**Frontend chroma-key (JS/Canvas):**
+```js
+const d = ctx.getImageData(0, 0, w, h).data;
+for (let i = 0; i < d.length; i += 4) {
+    if (d[i] < 80 && d[i+1] > 180 && d[i+2] < 80) d[i+3] = 0; // green → transparent
+}
 ```
 
 ---
@@ -397,7 +378,8 @@ jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1, 2, 0), quality=75)
 | `README.md` | English human-readable guide |
 | `README_ZH.md` | Chinese human-readable guide |
 | `README_AGENT.md` | This file — optimized for AI agents |
-| **`merge_onnx_fast.py`** | **Export `merged_fast.onnx` — the only script you need** |
+| **`merge_onnx_fast.py`** | **Export → bake → ZIP — the only script you need** |
+| `bake_texture.py` | Embed character texture into ONNX graph |
 | `web_demo/server.py` | Web demo server (mouse tracking + idle animation) |
 | `web_demo/static/index.html` | Web demo frontend |
 | `onnx_test/compare.py` | ONNX vs PyTorch validation script |

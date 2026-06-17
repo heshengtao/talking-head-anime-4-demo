@@ -9,13 +9,13 @@
 > https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party users:** Import the generated ZIP file (`output/<name>.zip`). It contains `model.onnx` (green-screen chroma-key model) + `character.png` (texture).
+> **Super Agent Party users:** Import the generated ZIP file (`output/<name>.zip`). It contains a single `model.onnx` — texture already baked in, only `pose` input needed.
 
 ---
 
 This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to a deployable ZIP** for real-time GPU inference — no PyTorch dependency at runtime.
 
-> **Final output:** `output/<name>.zip` — contains `model.onnx` (80+ fps, green-screen background `#00FF00`) and `character.png`. Frontends chroma-key the green to restore transparency.
+> **Final output:** `output/<name>.zip` — contains `model.onnx` (texture baked in, single-input `pose`, 80+ fps, green-screen `#00FF00`). Frontends chroma-key the green to restore transparency.
 
 The original research is from ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo). This fork adds production-ready ONNX export and a web demo.
 

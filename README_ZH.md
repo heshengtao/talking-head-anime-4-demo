@@ -9,13 +9,13 @@
 > https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party 用户：** 导入生成的 ZIP 文件（`output/<名称>.zip`），内含 `model.onnx`（绿幕抠图模型）+ `character.png`（纹理图）。
+> **Super Agent Party 用户：** 导入生成的 ZIP 文件（`output/<名称>.zip`），内含单个 `model.onnx`——纹理已内嵌，仅需 `pose` 输入。
 
 ---
 
 本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为可部署的 ZIP 包**，实现纯 ONNX GPU 实时推理——完全无需 PyTorch。
 
-> **最终产物：** `output/<名称>.zip` — 包含 `model.onnx`（80+ fps，绿幕背景 `#00FF00`）和 `character.png`。前端通过色键抠绿恢复透明通道。
+> **最终产物：** `output/<名称>.zip` — 包含 `model.onnx`（纹理内嵌，单输入 `pose`，80+ fps，绿幕 `#00FF00`）。前端通过色键抠绿恢复透明通道。
 
 原始研究来自 ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo)。本 Fork 增加了可直接用于生产环境的 ONNX 导出和 Web 演示。
 
