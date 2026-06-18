@@ -22,13 +22,13 @@ def _srgb_to_linear(x):
 
 
 def preprocess_texture(path: str) -> np.ndarray:
-    """Load RGBA PNG → (1, 4, 512, 512) float32 in [-1,1], premultiplied alpha."""
+    """Load RGBA PNG → (1, 4, 512, 512) float16 in [-1,1], premultiplied alpha."""
     img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
     img[:, :, :3] = _srgb_to_linear(img[:, :, :3])
-    img[:, :, :3] *= img[:, :, 3:4]            # premultiply alpha
-    img = img * 2.0 - 1.0                       # [0,1] → [-1,1]
-    img = np.expand_dims(img.transpose(2, 0, 1), 0)  # HWC → NCHW
-    return img.astype(np.float32)
+    img[:, :, :3] *= img[:, :, 3:4]
+    img = img * 2.0 - 1.0
+    img = np.expand_dims(img.transpose(2, 0, 1), 0)
+    return img.astype(np.float16)
 
 
 def bake(model_path: str, texture_path: str, output_path: str):
@@ -40,10 +40,20 @@ def bake(model_path: str, texture_path: str, output_path: str):
     # 1. Preprocess the texture
     texture = preprocess_texture(texture_path)  # (1, 4, 512, 512) float32
 
-    # 2. Create a Constant initializer for the image tensor
-    image_constant = numpy_helper.from_array(texture, name="baked_image")
+    # 2. Create a Constant initializer for the image tensor (stored as float16)
+    texture_f16 = texture  # (1, 4, 512, 512) float16
+    image_constant = numpy_helper.from_array(texture_f16, name="baked_image_f16")
 
-    # 3. Find all nodes that consume the 'image' input
+    # 3. Add a Cast node to convert float16 → float32 for the model
+    cast_node = helper.make_node(
+        "Cast",
+        inputs=["baked_image_f16"],
+        outputs=["baked_image"],
+        to=1,  # TensorProto.FLOAT = 1
+        name="cast_texture_to_float32"
+    )
+
+    # 4. Find all nodes that consume the 'image' input
     image_input_name = None
     for inp in graph.input:
         if inp.name == "image":
@@ -53,17 +63,17 @@ def bake(model_path: str, texture_path: str, output_path: str):
     if image_input_name is None:
         raise RuntimeError("Model has no 'image' input")
 
-    # 4. Replace 'image' references in all nodes with the constant
-    #    We need to add the initializer and rewire node inputs
+    # 5. Add the float16 constant and Cast node to the graph
     graph.initializer.append(image_constant)
+    graph.node.insert(0, cast_node)  # insert at beginning
 
-    # 5. Rewire: for every node that takes 'image' as input, replace with 'baked_image'
-    for node in graph.node:
+    # 6. Rewire: for every node that takes 'image' as input, replace with 'baked_image'
+    for node in graph.node[1:]:  # skip the Cast node itself
         for i, name in enumerate(node.input):
             if name == "image":
                 node.input[i] = "baked_image"
 
-    # 6. Remove 'image' from graph inputs (keep only 'pose')
+    # 7. Remove 'image' from graph inputs (keep only 'pose')
     new_inputs = [inp for inp in graph.input if inp.name != "image"]
     del graph.input[:]
     graph.input.extend(new_inputs)
