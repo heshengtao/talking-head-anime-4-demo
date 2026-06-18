@@ -62,3 +62,4 @@ onnx_test/01_*.png
 onnx_test/02_*.png
 *.xcf
 Lyra/
+.DS_Store

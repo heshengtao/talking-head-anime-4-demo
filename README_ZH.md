@@ -262,10 +262,10 @@ pip install coremltools pillow
 # 2. 转换（单输入模型，纹理内嵌）
 python convert_coreml.py data/distill_examples/my_char/character_model
 
-# 输出：output/model_coreml.mlpackage
+# 输出：output/model.mlpackage
 ```
 
-**model_coreml.mlpackage 规范：**
+**model.mlpackage 规范：**
 
 | 端口 | 名称 | 形状 | 类型 | 说明 |
 |------|------|------|------|------|
@@ -276,7 +276,7 @@ python convert_coreml.py data/distill_examples/my_char/character_model
 
 ```python
 from coremltools.models import MLModel
-model = MLModel("model_coreml.mlpackage")
+model = MLModel("model.mlpackage")
 output = model.predict({"pose": pose_array})
 ```
 

@@ -260,10 +260,10 @@ pip install coremltools pillow
 # 2. Convert (single-input model, texture baked in)
 python convert_coreml.py data/distill_examples/my_char/character_model
 
-# Output: output/model_coreml.mlpackage
+# Output: output/model.mlpackage
 ```
 
-**model_coreml.mlpackage specification:**
+**model.mlpackage specification:**
 
 | Port | Name | Shape | Type | Description |
 |------|------|-------|------|-------------|
@@ -274,7 +274,7 @@ python convert_coreml.py data/distill_examples/my_char/character_model
 
 ```python
 from coremltools.models import MLModel
-model = MLModel("model_coreml.mlpackage")
+model = MLModel("model.mlpackage")
 output = model.predict({"pose": pose_array})
 ```
 
