@@ -267,10 +267,50 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 | Output | `rgb` | (1, 3, 512, 512) | **uint8** | sRGB RGB on green (#00FF00) background |
 
 > **Single input!** The character texture is baked into the ONNX graph as a constant. No separate image file or runtime preprocessing needed.
+>
+> **On Apple Silicon Mac?** Instead of ONNX, use `convert_coreml.py` (Step 10 below) for ~74 fps Neural Engine inference.
 
 ---
 
-## Step 10: Test the Model
+## Step 10: (Mac Only) Convert to Apple Silicon CoreML
+
+For **M1/M2/M3/M4 Mac** deployment, convert directly to CoreML `.mlpackage` — ~74 fps on M4 Neural Engine (18× faster than ONNX CPU).
+
+```bash
+# Install CoreML tooling
+pip install coremltools pillow
+
+# Convert (single-input model, texture baked in)
+python convert_coreml.py data/distill_examples/my_char/character_model
+# Output: data/distill_examples/my_char/character_model/model_baked.mlpackage
+```
+
+**model_baked.mlpackage specification:**
+
+| Port | Name | Shape | Type | Description |
+|------|------|-------|------|-------------|
+| Input | `pose` | (1, 45) | float32 | 45 pose parameters |
+| Output | `blended` | (1, 4, 512, 512) | float32 | RGBA in [-1, 1], premultiplied alpha |
+
+**Inference (no PyTorch, no ONNX):**
+
+```python
+from coremltools.models import MLModel
+model = MLModel("model_baked.mlpackage")
+output = model.predict({"pose": pose_array})
+```
+
+**Mac web demo:**
+
+```bash
+python web_demo_mac/server.py
+# Open http://localhost:8000 — character follows mouse
+# Auto-selects CoreML on Mac, falls back to ONNX CPU
+```
+
+---
+
+## Step 11: Test the Model
 
 ### Quick benchmark
 
@@ -367,10 +407,14 @@ for (let i = 0; i < d.length; i += 4) {
 | `README.md` | English human-readable guide |
 | `README_ZH.md` | Chinese human-readable guide |
 | `README_AGENT.md` | This file — optimized for AI agents |
-| **`merge_onnx_fast.py`** | **Export → bake → ZIP — the only script you need** |
+| **`merge_onnx_fast.py`** | **Export → bake → ZIP — the only ONNX export script you need** |
+| **`convert_coreml.py`** | **PyTorch .pt → CoreML .mlpackage (Apple Silicon, ~74 fps)** |
+| `export_onnx_coreml.py` | ONNX export optimized for CoreML EP (pre-computed grids) |
 | `bake_texture.py` | Embed character texture into ONNX graph |
-| `web_demo/server.py` | Web demo server (mouse tracking + idle animation) |
-| `web_demo/static/index.html` | Web demo frontend |
+| `web_demo/server.py` | Web demo server (CUDA ONNX backend, mouse tracking) |
+| `web_demo_mac/server.py` | Web demo server (CoreML + ONNX fallback, Mac optimized) |
+| `web_demo/static/index.html` | Web demo frontend (shared) |
+| `web_demo_mac/static/index.html` | Web demo frontend (shared, Mac edition) |
 | `onnx_test/compare.py` | ONNX vs PyTorch validation script |
 
 <details>

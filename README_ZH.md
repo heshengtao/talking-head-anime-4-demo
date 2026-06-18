@@ -52,6 +52,10 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 # 8. 测试
 python web_demo/server.py
 # 打开 http://localhost:8000
+
+# (Mac 专属) 转为 CoreML，M1/M2/M3/M4 加速（~74 fps vs ONNX CPU ~4 fps）
+python convert_coreml.py data/distill_examples/my_char/character_model
+python web_demo_mac/server.py
 ```
 
 ---
@@ -245,7 +249,47 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 
 > 绿幕 `#00FF00`——前端通过色键抠绿恢复透明。深色衣服不受影响。
 
-#### 第九步：测试 ONNX 模型
+#### 第九步：（Mac 专属）转为 Apple Silicon CoreML
+
+在 **M1/M2/M3/M4 Mac** 上部署时，可将 PyTorch 模型直接转为 CoreML `.mlpackage`——无需 ONNX、无需 GPU，原生 Neural Engine 推理。
+
+**性能：** M4 约 74 fps（比 ONNX CPU 快 18 倍）。
+
+```bash
+# 1. 安装 CoreML 工具
+pip install coremltools pillow
+
+# 2. 转换（单输入模型，纹理内嵌）
+python convert_coreml.py data/distill_examples/my_char/character_model
+
+# 输出：data/distill_examples/my_char/character_model/model_baked.mlpackage
+```
+
+**模型输入输出（model_baked.mlpackage）：**
+
+| 端口 | 名称 | 形状 | 类型 | 说明 |
+|------|------|------|------|------|
+| 输入 | `pose` | (1, 45) | float32 | 45 维姿态参数 |
+| 输出 | `blended` | (1, 4, 512, 512) | float32 | RGBA 混合图像，[-1,1]，预乘 alpha |
+
+**推理代码（无 PyTorch 依赖）：**
+
+```python
+from coremltools.models import MLModel
+model = MLModel("model_baked.mlpackage")
+output = model.predict({"pose": pose_array})
+```
+
+**Mac Web 演示：**
+
+```bash
+python web_demo_mac/server.py
+# 打开 http://localhost:8000 — 角色跟随鼠标
+```
+
+该 demo 在 Mac 上自动选择 CoreML 后端，若无 `.mlpackage` 则回退 ONNX CPU。
+
+#### 第十步：测试 ONNX 模型
 
 **命令行性能测试：**
 ```bash

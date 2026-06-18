@@ -52,6 +52,10 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 # 8. Test
 python web_demo/server.py
 # Open http://localhost:8000
+
+# (Mac only) Convert to CoreML for M1/M2/M3/M4 (~74 fps vs ~4 fps ONNX CPU)
+python convert_coreml.py data/distill_examples/my_char/character_model
+python web_demo_mac/server.py
 ```
 
 ---
@@ -243,7 +247,47 @@ Output:
 
 > Green screen `#00FF00` — frontends chroma-key the green to restore transparency. Dark clothing is not affected.
 
-#### Step 9: Test the ONNX Model
+#### Step 9: (Mac Only) Convert to Apple Silicon CoreML
+
+For **M1/M2/M3/M4 Mac** deployment, convert the PyTorch model directly to CoreML `.mlpackage` — no ONNX, no GPU dependency, native Neural Engine acceleration.
+
+**Performance:** ~74 fps on M4 (18× faster than ONNX CPU).
+
+```bash
+# 1. Install CoreML tooling
+pip install coremltools pillow
+
+# 2. Convert (single-input model, texture baked in)
+python convert_coreml.py data/distill_examples/my_char/character_model
+
+# Output: data/distill_examples/my_char/character_model/model_baked.mlpackage
+```
+
+**Model I/O (model_baked.mlpackage):**
+
+| Port | Name | Shape | Type | Description |
+|------|------|-------|------|-------------|
+| Input | `pose` | (1, 45) | float32 | 45 pose parameters |
+| Output | `blended` | (1, 4, 512, 512) | float32 | RGBA blended image in [-1, 1], premultiplied alpha |
+
+**Inference code (no PyTorch dependency):**
+
+```python
+from coremltools.models import MLModel
+model = MLModel("model_baked.mlpackage")
+output = model.predict({"pose": pose_array})
+```
+
+**Mac web demo:**
+
+```bash
+python web_demo_mac/server.py
+# Open http://localhost:8000 — character follows mouse
+```
+
+This demo auto-selects CoreML on Mac, falling back to ONNX CPU if `.mlpackage` is unavailable.
+
+#### Step 10: Test the ONNX Model
 
 **Command-line benchmark:**
 ```bash
