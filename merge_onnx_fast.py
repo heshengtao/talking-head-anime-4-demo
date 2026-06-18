@@ -9,7 +9,7 @@ Example:
     python merge_onnx_fast.py data/character_models/lambda_00
     python merge_onnx_fast.py data/distill_examples/lambda_02/character_model
 """
-import sys, os, zipfile, shutil
+import sys, os, shutil
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import torch
@@ -218,22 +218,21 @@ def main():
         model_name = os.path.basename(model_dir.rstrip('/\\'))
         output_dir = os.path.join(PROJECT_ROOT, "output")
         os.makedirs(output_dir, exist_ok=True)
-        zip_path = os.path.join(output_dir, f"{model_name}.zip")
 
         # ── Step 1: bake texture into ONNX (single-input model) ──
         from bake_texture import bake
         baked_path = os.path.join(onnx_dir, "merged_baked.onnx")
         bake(out_path, char_png, baked_path)
 
-        # ── Step 2: package baked ONNX into ZIP (no separate texture needed) ──
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.write(baked_path, "model.onnx")
+        # ── Step 2: copy baked model to output/ as final artifact ──
+        final_path = os.path.join(output_dir, "model.onnx")
+        shutil.copy2(baked_path, final_path)
 
-        zip_size = os.path.getsize(zip_path) / 1024
-        print(f"  Packaged: {zip_path} ({zip_size:.0f} KB)")
-        print(f"  Contents: model.onnx (texture baked in, single-input)")
+        size_kb = os.path.getsize(final_path) / 1024
+        print(f"  Final: {final_path} ({size_kb:.0f} KB)")
+        print(f"  Single-input model — only 'pose' needed, texture baked in.")
     else:
-        print(f"  WARNING: character.png not found, skipping ZIP packaging")
+        print(f"  WARNING: character.png not found, skipping final packaging")
 
 
 if __name__ == "__main__":

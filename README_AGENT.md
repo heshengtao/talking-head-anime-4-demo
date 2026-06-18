@@ -9,15 +9,14 @@
 Train a lightweight student model from a single anime character image, then export to a deployable **single-input** ONNX model:
 
 ```
-output/<model_name>.zip
-  └── model.onnx  ← single-input (pose only), green-screen chroma-key, 80+ fps, uint8 RGB
+output/model.onnx
 ```
 
-> **model.onnx has the character texture baked in.** No separate `character.png` needed at runtime. Just pass a 45-dim pose vector and receive the rendered frame.
+> **Single `pose` input, texture baked in.** No separate files, no runtime preprocessing. Just pass a 45-dim pose vector and receive the rendered green-screen RGB frame.
 >
 > **Green screen (`#00FF00`) background.** Frontends (Super Agent Party, etc.) chroma-key the green to restore transparency. Dark clothing is not affected.
 >
-> **This ZIP is the only deployable artifact.** Import it directly into Super Agent Party or your own app.
+> **`output/model.onnx` is the final artifact.** Import it directly into Super Agent Party or your own app.
 >
 > Ignore `export_onnx.py` and `merge_onnx.py` — they produce alternative formats not needed for production use.
 
@@ -241,12 +240,12 @@ venv\Scripts\python.exe -m pip install onnxruntime-directml==1.17.1
 
 ---
 
-## Step 9: Export to model.onnx + Package ZIP
+## Step 9: Export to model.onnx
 
 This is the **only** export script you need. It:
 1. Exports `merged_fast.onnx` (GPU-post-processed, green screen)
 2. **Bakes the texture into the model** → single-input `merged_baked.onnx`
-3. Packages as `model.onnx` in a deployable ZIP
+3. Copies the final artifact to `output/model.onnx`
 
 ```bash
 python merge_onnx_fast.py data/distill_examples/my_char/character_model
@@ -254,19 +253,13 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 
 **Output:**
 
-| File | Location |
-|------|----------|
-| `merged_fast.onnx` | `data/distill_examples/my_char/character_model/onnx/` |
-| `merged_baked.onnx` | `data/distill_examples/my_char/character_model/onnx/` |
-| **`my_char.zip`** | **`output/`** ← deployable artifact |
+| File | Location | Purpose |
+|------|----------|---------|
+| `merged_fast.onnx` | `onnx/` | Intermediate (2-input) |
+| `merged_baked.onnx` | `onnx/` | Intermediate (baked) |
+| **`model.onnx`** | **`output/`** | ← **Final artifact** |
 
-The ZIP contains a single file:
-```
-my_char.zip
-  └── model.onnx          (~8.6 MB) — texture baked in, single-input
-```
-
-**Model specification:**
+**model.onnx specification:**
 
 | Port | Name | Shape | Type | Description |
 |------|------|-------|------|-------------|
@@ -343,17 +336,13 @@ Full parameter list: `src/tha4/poser/modes/pose_parameters.py`
 ## Production Inference Code
 
 ```python
-import numpy as np, onnxruntime as ort, simplejpeg, zipfile
+import numpy as np, onnxruntime as ort, simplejpeg
 
-# 1. Extract model from ZIP (single file)
-with zipfile.ZipFile("my_char.zip") as zf:
-    zf.extractall("my_char_model")
-
-# 2. Load model — no texture preprocessing needed!
-sess = ort.InferenceSession("my_char_model/model.onnx",
+# 1. Load the baked model — no texture preprocessing needed!
+sess = ort.InferenceSession("model.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 3. Infer every frame — just pass pose, no image input
+# 2. Infer every frame — just pass pose
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0, 18] = pose[0, 19] = 1.0   # close eyes
 

@@ -9,13 +9,13 @@
 > https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party 用户：** 导入生成的 ZIP 文件（`output/<名称>.zip`），内含单个 `model.onnx`——纹理已内嵌，仅需 `pose` 输入。
+> **Super Agent Party 用户：** 导入 `output/model.onnx`——纹理内嵌，仅需 `pose` 输入。
 
 ---
 
 本仓库用于从单张动漫角色图片**训练轻量学生模型**，并**导出为可部署的 ZIP 包**，实现纯 ONNX GPU 实时推理——完全无需 PyTorch。
 
-> **最终产物：** `output/<名称>.zip` — 包含 `model.onnx`（纹理内嵌，单输入 `pose`，80+ fps，绿幕 `#00FF00`）。前端通过色键抠绿恢复透明通道。
+> **最终产物：** `output/model.onnx` — 纹理内嵌，单输入 `pose`，80+ fps，绿幕 `#00FF00`。前端通过色键抠绿恢复透明通道。
 
 原始研究来自 ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo)。本 Fork 增加了可直接用于生产环境的 ONNX 导出和 Web 演示。
 
@@ -233,7 +233,7 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 
 输出：
 - `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx`（约 4.5 MB）——绿幕抠图模型
-- **`output/my_char.zip`**——可部署的 ZIP 包，内含 `model.onnx` + `character.png`
+- **`output/model.onnx`**——最终产物（单输入，纹理内嵌）
 
 **模型输入输出（merged_fast.onnx）：**
 
@@ -334,35 +334,15 @@ python web_demo/server.py
 ### 生产环境使用
 
 ```python
-import numpy as np, onnxruntime as ort, simplejpeg, zipfile
-from PIL import Image
+import numpy as np, onnxruntime as ort, simplejpeg
 
-# 1. 解压 ZIP 包
-with zipfile.ZipFile("my_char.zip") as zf:
-    zf.extractall("my_char_model")
-
-# 2. 加载模型（Windows 用 DirectML GPU，Linux 用 CUDA）
-sess = ort.InferenceSession("my_char_model/model.onnx",
+sess = ort.InferenceSession("model.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 3. 预处理纹理图（启动时执行一次即可）
-def load_texture(path):
-    img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-    rgb = img[:,:,:3].copy()
-    m = rgb <= 0.04045; rgb[m] /= 12.92
-    rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
-    img[:,:,:3] = rgb
-    img[:,:,:3] *= img[:,:,3:4]
-    img = img * 2.0 - 1.0
-    return img.transpose(2,0,1)[None].astype(np.float32)
-
-image_np = load_texture("my_char_model/character.png")
-
-# 4. 每帧推理（绿幕 RGB → 前端色键抠绿）
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0,18] = pose[0,19] = 1.0   # 闭眼
 
-rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
+rgb = sess.run(None, {"pose": pose})[0]  # (1,3,512,512) uint8
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
 ```
 

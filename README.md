@@ -9,13 +9,13 @@
 > https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party users:** Import the generated ZIP file (`output/<name>.zip`). It contains a single `model.onnx` — texture already baked in, only `pose` input needed.
+> **Super Agent Party users:** Import `output/model.onnx` — texture baked in, single `pose` input.
 
 ---
 
 This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to a deployable ZIP** for real-time GPU inference — no PyTorch dependency at runtime.
 
-> **Final output:** `output/<name>.zip` — contains `model.onnx` (texture baked in, single-input `pose`, 80+ fps, green-screen `#00FF00`). Frontends chroma-key the green to restore transparency.
+> **Final output:** `output/model.onnx` — texture baked in, single `pose` input, 80+ fps, green-screen `#00FF00`. Frontends chroma-key the green to restore transparency.
 
 The original research is from ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo). This fork adds production-ready ONNX export and a web demo.
 
@@ -231,7 +231,7 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 
 Output:
 - `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~4.5 MB) — green-screen model
-- **`output/my_char.zip`** — deployable artifact with `model.onnx` + `character.png`
+- **`output/model.onnx`** — final artifact (single-input, texture baked in)
 
 **Model I/O (merged_fast.onnx):**
 
@@ -329,38 +329,18 @@ Source: `src/tha4/poser/modes/pose_parameters.py`.
 
 ---
 
-### Using the Deployable ZIP in Production
+### Using the Deployable ONNX in Production
 
 ```python
-import numpy as np, onnxruntime as ort, simplejpeg, zipfile
-from PIL import Image
+import numpy as np, onnxruntime as ort, simplejpeg
 
-# 1. Extract ZIP
-with zipfile.ZipFile("my_char.zip") as zf:
-    zf.extractall("my_char_model")
-
-# 2. Load model (DirectML for Windows GPU, CUDA for Linux)
-sess = ort.InferenceSession("my_char_model/model.onnx",
+sess = ort.InferenceSession("model.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 3. Preprocess texture (once at startup)
-def load_texture(path):
-    img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-    rgb = img[:,:,:3].copy()
-    m = rgb <= 0.04045; rgb[m] /= 12.92
-    rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
-    img[:,:,:3] = rgb
-    img[:,:,:3] *= img[:,:,3:4]
-    img = img * 2.0 - 1.0
-    return img.transpose(2,0,1)[None].astype(np.float32)
-
-image_np = load_texture("my_char_model/character.png")
-
-# 4. Infer every frame (green-screen RGB → chroma-key in frontend)
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0,18] = pose[0,19] = 1.0   # close eyes
 
-rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
+rgb = sess.run(None, {"pose": pose})[0]  # (1,3,512,512) uint8
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
 ```
 
