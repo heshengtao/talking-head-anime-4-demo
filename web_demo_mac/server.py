@@ -118,10 +118,10 @@ class IdlePoseGenerator:
 # ── CoreML backend (baked single-input model) ─────────────
 
 def find_coreml_model():
-    """Search for model_baked.mlpackage in common locations."""
+    """Search for model_coreml.mlpackage in common locations."""
     candidates = [
-        os.path.join(PROJECT_ROOT, "Lyra", "model_baked.mlpackage"),
         os.path.join(PROJECT_ROOT, "output", "model_coreml.mlpackage"),
+        os.path.join(PROJECT_ROOT, "Lyra", "model_baked.mlpackage"),
         os.environ.get("THA4_COREML_MODEL", ""),
     ]
     for p in candidates:

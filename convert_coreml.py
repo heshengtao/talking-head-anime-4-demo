@@ -29,6 +29,8 @@ from tha4.nn.siren.morpher.siren_morpher_03 import (
     SirenMorpher03, SirenMorpher03Args, SirenMorpherLevelArgs)
 from tha4.nn.siren.vanilla.siren import SirenArgs
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+
 
 def precompute_grid(image_size, device, dtype=torch.float32):
     h = w = image_size
@@ -172,7 +174,7 @@ def main():
         minimum_deployment_target=ct.target.macOS14,
     )
 
-    out_path = os.path.join(os.path.dirname(model_dir), "..", "..", "Lyra", "model_baked.mlpackage")
+    out_path = os.path.join(PROJECT_ROOT, "output", "model_coreml.mlpackage")
     out_path = os.path.abspath(out_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     mlmodel.save(out_path)
