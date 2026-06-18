@@ -9,13 +9,13 @@
 > https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
-> **Super Agent Party users:** Import the generated ZIP file (`output/<name>.zip`). It contains `model.onnx` (green-screen chroma-key model) + `character.png` (texture).
+> **Super Agent Party users:** Import `output/model.onnx` — texture baked in, single `pose` input.
 
 ---
 
 This repository contains tools to **train a lightweight student model** from a single anime character image, then **export it to a deployable ZIP** for real-time GPU inference — no PyTorch dependency at runtime.
 
-> **Final output:** `output/<name>.zip` — contains `model.onnx` (80+ fps, green-screen background `#00FF00`) and `character.png`. Frontends chroma-key the green to restore transparency.
+> **Final output:** `output/model.onnx` — texture baked in, single `pose` input, 80+ fps, green-screen `#00FF00`. Frontends chroma-key the green to restore transparency.
 
 The original research is from ["Talking Head(?) Anime from a Single Image 4"](https://github.com/pkhungurn/talking-head-anime-4-demo). This fork adds production-ready ONNX export and a web demo.
 
@@ -52,6 +52,10 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 # 8. Test
 python web_demo/server.py
 # Open http://localhost:8000
+
+# (Mac only) Convert to CoreML for M1/M2/M3/M4 (~74 fps vs ~4 fps ONNX CPU)
+python convert_coreml.py data/distill_examples/my_char/character_model
+python web_demo_mac/server.py
 ```
 
 ---
@@ -231,7 +235,7 @@ python merge_onnx_fast.py data/distill_examples/my_char/character_model
 
 Output:
 - `data/distill_examples/my_char/character_model/onnx/merged_fast.onnx` (~4.5 MB) — green-screen model
-- **`output/my_char.zip`** — deployable artifact with `model.onnx` + `character.png`
+- **`output/model.onnx`** — final artifact (single-input, texture baked in)
 
 **Model I/O (merged_fast.onnx):**
 
@@ -243,7 +247,47 @@ Output:
 
 > Green screen `#00FF00` — frontends chroma-key the green to restore transparency. Dark clothing is not affected.
 
-#### Step 9: Test the ONNX Model
+#### Step 9: (Mac Only) Convert to Apple Silicon CoreML
+
+For **M1/M2/M3/M4 Mac** deployment, convert the PyTorch model directly to CoreML `.mlpackage` — no ONNX, no GPU dependency, native Neural Engine acceleration.
+
+**Performance:** ~74 fps on M4 (18× faster than ONNX CPU).
+
+```bash
+# 1. Install CoreML tooling
+pip install coremltools pillow
+
+# 2. Convert (single-input model, texture baked in)
+python convert_coreml.py data/distill_examples/my_char/character_model
+
+# Output: data/distill_examples/my_char/character_model/model_baked.mlpackage
+```
+
+**Model I/O (model_baked.mlpackage):**
+
+| Port | Name | Shape | Type | Description |
+|------|------|-------|------|-------------|
+| Input | `pose` | (1, 45) | float32 | 45 pose parameters |
+| Output | `blended` | (1, 4, 512, 512) | float32 | RGBA blended image in [-1, 1], premultiplied alpha |
+
+**Inference code (no PyTorch dependency):**
+
+```python
+from coremltools.models import MLModel
+model = MLModel("model_baked.mlpackage")
+output = model.predict({"pose": pose_array})
+```
+
+**Mac web demo:**
+
+```bash
+python web_demo_mac/server.py
+# Open http://localhost:8000 — character follows mouse
+```
+
+This demo auto-selects CoreML on Mac, falling back to ONNX CPU if `.mlpackage` is unavailable.
+
+#### Step 10: Test the ONNX Model
 
 **Command-line benchmark:**
 ```bash
@@ -329,38 +373,18 @@ Source: `src/tha4/poser/modes/pose_parameters.py`.
 
 ---
 
-### Using the Deployable ZIP in Production
+### Using the Deployable ONNX in Production
 
 ```python
-import numpy as np, onnxruntime as ort, simplejpeg, zipfile
-from PIL import Image
+import numpy as np, onnxruntime as ort, simplejpeg
 
-# 1. Extract ZIP
-with zipfile.ZipFile("my_char.zip") as zf:
-    zf.extractall("my_char_model")
-
-# 2. Load model (DirectML for Windows GPU, CUDA for Linux)
-sess = ort.InferenceSession("my_char_model/model.onnx",
+sess = ort.InferenceSession("model.onnx",
     providers=['DmlExecutionProvider', 'CPUExecutionProvider'])
 
-# 3. Preprocess texture (once at startup)
-def load_texture(path):
-    img = np.array(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-    rgb = img[:,:,:3].copy()
-    m = rgb <= 0.04045; rgb[m] /= 12.92
-    rgb[~m] = ((rgb[~m] + 0.055) / 1.055) ** 2.4
-    img[:,:,:3] = rgb
-    img[:,:,:3] *= img[:,:,3:4]
-    img = img * 2.0 - 1.0
-    return img.transpose(2,0,1)[None].astype(np.float32)
-
-image_np = load_texture("my_char_model/character.png")
-
-# 4. Infer every frame (green-screen RGB → chroma-key in frontend)
 pose = np.zeros((1, 45), dtype=np.float32)
 pose[0,18] = pose[0,19] = 1.0   # close eyes
 
-rgb = sess.run(None, {"image": image_np, "pose": pose})[0]
+rgb = sess.run(None, {"pose": pose})[0]  # (1,3,512,512) uint8
 jpeg = simplejpeg.encode_jpeg(rgb[0].transpose(1,2,0), quality=75)
 ```
 

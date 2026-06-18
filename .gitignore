@@ -61,3 +61,4 @@ onnx_test/00_*.png
 onnx_test/01_*.png
 onnx_test/02_*.png
 *.xcf
+Lyra/

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THA4 Live Demo</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#1a1a2e; display:flex; justify-content:center; align-items:center; min-height:100vh; font-family:'Segoe UI',system-ui,sans-serif; }
+    .container { text-align:center; cursor:none; }
+    canvas { border-radius:12px; box-shadow:0 0 40px rgba(100,100,255,0.2); max-width:90vw; max-height:85vh; }
+    .status { margin-top:16px; color:#bbb; font-size:14px; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:#f44; }
+    .dot.live { background:#4f4; animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .fps { margin-left:12px; } .fps.good { color:#4f4; }
+    .info { margin-left:12px; color:#888; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <canvas id="canvas" width="512" height="512"></canvas>
+    <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="status">connecting...</span>
+        <span class="fps" id="fps"></span>
+        <span class="info" id="info"></span>
+    </div>
+</div>
+<script>
+const canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+const dot=document.getElementById('dot'), stEl=document.getElementById('status');
+const fpsEl=document.getElementById('fps'), infoEl=document.getElementById('info');
+let fc=0, lastFps=performance.now(), ws, mouseX=0, mouseY=0, mouseActive=false;
+
+// track mouse over canvas → normalized [-1, 1]
+canvas.addEventListener('mousemove', e=>{
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
+    mouseX=((e.clientX-rect.left)*scaleX/canvas.width)*2-1;
+    mouseY=((e.clientY-rect.top)*scaleY/canvas.height)*2-1;
+    mouseActive=true;
+});
+canvas.addEventListener('mouseleave', ()=>{ mouseActive=false; mouseX=0; mouseY=0; });
+// also track over entire body for continuous following
+document.addEventListener('mousemove', e=>{
+    const rect=canvas.getBoundingClientRect();
+    const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+    const maxDist=Math.max(window.innerWidth,window.innerHeight);
+    mouseX=((e.clientX-cx)/maxDist)*2;  // softer falloff when far
+    mouseY=((e.clientY-cy)/maxDist)*2;
+});
+
+function connect(){
+    const proto=location.protocol==='https:'?'wss':'ws';
+    ws=new WebSocket(proto+'://'+location.host+'/ws');
+    ws.binaryType='arraybuffer';
+    ws.onopen=()=>{stEl.textContent='live  (move mouse)';dot.className='dot live'};
+    ws.onmessage=e=>{
+        const url=URL.createObjectURL(new Blob([e.data],{type:'image/jpeg'}));
+        const img=new Image();
+        img.onload=()=>{canvas.width=img.width;canvas.height=img.height;ctx.drawImage(img,0,0);URL.revokeObjectURL(url);fc++};
+        img.src=url;
+    };
+    ws.onclose=()=>{stEl.textContent='disconnected — retrying...';dot.className='dot';setTimeout(connect,2000)};
+    ws.onerror=()=>{stEl.textContent='error';dot.className='dot'};
+
+    // send mouse position at ~30fps
+    const sendMouse=()=>{
+        if(ws.readyState===WebSocket.OPEN){
+            ws.send(JSON.stringify({x:mouseX.toFixed(3), y:mouseY.toFixed(3)}));
+            infoEl.textContent=`mouse: ${(mouseX*100|0)/100} ${(mouseY*100|0)/100}`;
+        }
+    };
+    setInterval(sendMouse, 33);
+}
+
+setInterval(()=>{
+    const now=performance.now(), fps=Math.round(fc/((now-lastFps)/1000));
+    fpsEl.textContent=fps+' fps'; fpsEl.className='fps'+(fps>=25?' good':'');
+    fc=0;lastFps=now;
+},1000);
+connect();
+</script>
+</body>
+</html>
