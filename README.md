@@ -71,6 +71,7 @@ python web_demo_mac/server.py
 (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
 
 # Create venv
+git clone https://github.com/heshengtao/talking-head-anime-4-demo.git
 cd talking-head-anime-4-demo
 python -m venv venv --prompt talking-head-anime-4-demo
 
@@ -260,10 +261,10 @@ pip install coremltools pillow
 # 2. Convert (single-input model, texture baked in)
 python convert_coreml.py data/distill_examples/my_char/character_model
 
-# Output: output/model_coreml.mlpackage
+# Output: output/model.mlpackage
 ```
 
-**model_coreml.mlpackage specification:**
+**model.mlpackage specification:**
 
 | Port | Name | Shape | Type | Description |
 |------|------|-------|------|-------------|
@@ -274,7 +275,7 @@ python convert_coreml.py data/distill_examples/my_char/character_model
 
 ```python
 from coremltools.models import MLModel
-model = MLModel("model_coreml.mlpackage")
+model = MLModel("model.mlpackage")
 output = model.predict({"pose": pose_array})
 ```
 

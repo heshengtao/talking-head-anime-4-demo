@@ -118,10 +118,10 @@ class IdlePoseGenerator:
 # ── CoreML backend (baked single-input model) ─────────────
 
 def find_coreml_model():
-    """Search for model_coreml.mlpackage in common locations."""
+    """Search for model.mlpackage in common locations."""
     candidates = [
-        os.path.join(PROJECT_ROOT, "output", "model_coreml.mlpackage"),
-        os.path.join(PROJECT_ROOT, "Lyra", "model_baked.mlpackage"),
+        os.path.join(PROJECT_ROOT, "output", "model.mlpackage"),
+        os.path.join(PROJECT_ROOT, "Lyra", "model.mlpackage"),
         os.environ.get("THA4_COREML_MODEL", ""),
     ]
     for p in candidates:
@@ -133,7 +133,7 @@ def find_coreml_model():
 def init_coreml():
     model_path = find_coreml_model()
     if not model_path:
-        raise FileNotFoundError("No .mlpackage found (Lyra/model_baked.mlpackage or THA4_COREML_MODEL)")
+        raise FileNotFoundError("No .mlpackage found (output/model.mlpackage or THA4_COREML_MODEL)")
 
     from coremltools.models import MLModel
     model = MLModel(model_path)
@@ -241,7 +241,7 @@ def init_model():
     except Exception as e:
         print(f"[init] ONNX failed: {e}")
 
-    raise RuntimeError("No backend available. Put model_baked.mlpackage in Lyra/ or model.onnx.")
+    raise RuntimeError("No backend available. Put model.mlpackage in output/ or model.onnx.")
 
 
 # ── FastAPI ────────────────────────────────────────────────

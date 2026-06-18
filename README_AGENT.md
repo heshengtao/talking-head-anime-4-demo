@@ -282,10 +282,10 @@ pip install coremltools pillow
 
 # Convert (single-input model, texture baked in)
 python convert_coreml.py data/distill_examples/my_char/character_model
-# Output: output/model_coreml.mlpackage
+# Output: output/model.mlpackage
 ```
 
-**model_coreml.mlpackage specification:**
+**model.mlpackage specification:**
 
 | Port | Name | Shape | Type | Description |
 |------|------|-------|------|-------------|
@@ -296,7 +296,7 @@ python convert_coreml.py data/distill_examples/my_char/character_model
 
 ```python
 from coremltools.models import MLModel
-model = MLModel("model_coreml.mlpackage")
+model = MLModel("model.mlpackage")
 output = model.predict({"pose": pose_array})
 ```
 
@@ -408,7 +408,7 @@ for (let i = 0; i < d.length; i += 4) {
 | `README_ZH.md` | Chinese human-readable guide |
 | `README_AGENT.md` | This file — optimized for AI agents |
 | **`merge_onnx_fast.py`** | **Export → bake → ZIP — the only ONNX export script you need** |
-| **`convert_coreml.py`** | **PyTorch .pt → CoreML .mlpackage (Apple Silicon, ~74 fps) → `output/model_coreml.mlpackage`** |
+| **`convert_coreml.py`** | **PyTorch .pt → CoreML .mlpackage (Apple Silicon, ~74 fps) → `output/model.mlpackage`** |
 | `export_onnx_coreml.py` | ONNX export optimized for CoreML EP (pre-computed grids) |
 | `bake_texture.py` | Embed character texture into ONNX graph |
 | `web_demo/server.py` | Web demo server (CUDA ONNX backend, mouse tracking) |

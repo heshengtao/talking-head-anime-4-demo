@@ -174,7 +174,7 @@ def main():
         minimum_deployment_target=ct.target.macOS14,
     )
 
-    out_path = os.path.join(PROJECT_ROOT, "output", "model_coreml.mlpackage")
+    out_path = os.path.join(PROJECT_ROOT, "output", "model.mlpackage")
     out_path = os.path.abspath(out_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     mlmodel.save(out_path)
