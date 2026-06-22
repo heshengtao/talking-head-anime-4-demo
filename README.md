@@ -6,7 +6,7 @@
 > Send it the raw URL of the agent instructions:
 >
 > ```
-> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> curl -fsSL https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
 > **Super Agent Party users:** Import `output/model.onnx` — texture baked in, single `pose` input.

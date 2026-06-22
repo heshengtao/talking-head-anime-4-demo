@@ -6,7 +6,7 @@
 > 把下面这个链接发给它，即可在 AI 引导下完成全部流程：
 >
 > ```
-> https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
+> curl -fsSL https://raw.githubusercontent.com/heshengtao/talking-head-anime-4-demo/main/README_AGENT.md
 > ```
 >
 > **Super Agent Party 用户：** 导入 `output/model.onnx`——纹理内嵌，仅需 `pose` 输入。
