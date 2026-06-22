@@ -123,8 +123,8 @@ data/images/my_char.png
 Use [GIMP](https://www.gimp.org/) (free, open-source) to create a face mask:
 
 1. Open your `my_char.png` in GIMP
-2. Create a new layer, fill it **white**
-3. Use the paintbrush (black color) to paint over the **eyes and mouth** areas
+2. Create a new layer, fill with **black**
+3. Use **white rectangle** to paint over the **eyes and mouth** area
 4. Export as `my_char_face_mask.png` (512×512, RGB, no alpha)
 
 Reference: `data/images/lambda_00_face_mask.png` and `data/images/lambda_00_face_mask.xcf`.

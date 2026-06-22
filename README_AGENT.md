@@ -117,8 +117,8 @@ Install [GIMP](https://www.gimp.org/) (free, open-source).
 
 Steps to create mask:
 1. Open `data/images/my_char.png` in GIMP
-2. Add a new layer, fill it with WHITE (255,255,255)
-3. Select black color, use paintbrush to paint over eyes and mouth areas
+2. Create a new layer, fill with **black**
+3. Use **white rectangle** to paint over the **eyes and mouth** area
 4. Export as PNG: `data/images/my_char_face_mask.png` (512×512, RGB, no alpha channel)
 
 Mask color meaning:

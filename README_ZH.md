@@ -123,8 +123,8 @@ data/images/my_char.png
 使用 [GIMP](https://www.gimp.org/)（免费开源软件）创建面部遮罩：
 
 1. 用 GIMP 打开 `my_char.png`
-2. 新建图层，填充**白色**
-3. 用画笔工具（黑色）涂抹**眼睛和嘴巴**区域
+2. 新建图层，填充**黑色**
+3. 用**白色矩形**涂抹**眼睛和嘴巴**区域
 4. 导出为 `my_char_face_mask.png`（512×512，RGB，无透明通道）
 
 参考文件：`data/images/lambda_00_face_mask.png` 和 `data/images/lambda_00_face_mask.xcf`。
